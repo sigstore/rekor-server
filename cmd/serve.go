@@ -19,7 +19,7 @@ package cmd
 import (
 	"log"
 
-	"github.com/projectrekor/rekor-service/app"
+	"github.com/projectrekor/rekor-server/app"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

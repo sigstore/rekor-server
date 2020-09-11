@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/projectrekor/rekor-service/logging"
+	"github.com/projectrekor/rekor-server/logging"
 	"google.golang.org/grpc"
 )
 

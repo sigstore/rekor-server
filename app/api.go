@@ -29,7 +29,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/google/trillian"
-	"github.com/projectrekor/rekor-service/logging"
+	"github.com/projectrekor/rekor-server/logging"
 	"github.com/spf13/viper"
 )
 

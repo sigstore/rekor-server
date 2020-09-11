@@ -30,7 +30,7 @@ var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "rekor-service",
+	Use:   "rekor-server",
 	Short: "A brief description of your application",
 	Long: `A longer description that spans multiple lines and likely contains
 examples and usage of using your application. For example:
@@ -55,7 +55,7 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rekor-service.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rekor-server.yaml)")
 
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
@@ -79,9 +79,9 @@ func initConfig() {
 			os.Exit(1)
 		}
 
-		// Search config in home directory with name ".rekor-service" (without extension).
+		// Search config in home directory with name ".rekor-server" (without extension).
 		viper.AddConfigPath(home)
-		viper.SetConfigName(".rekor-service")
+		viper.SetConfigName(".rekor-server")
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match

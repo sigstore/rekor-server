@@ -23,7 +23,7 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/projectrekor/rekor-service/logging"
+	"github.com/projectrekor/rekor-server/logging"
 	"github.com/spf13/viper"
 )
 
