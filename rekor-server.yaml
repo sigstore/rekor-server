@@ -1,7 +1,7 @@
 trillian_log_server:
   address: "127.0.0.1"
   port: 8091
-  tlog_id: 7305461377290870015
+  tlog_id: 7305461377290870015 # use `createtree --admin_server=log_server_rpc_ip:log_server_rpc_port`
 
 rekor_server:
   address: "127.0.0.1"
