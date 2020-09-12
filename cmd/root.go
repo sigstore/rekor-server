@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/projectrekor/rekor-server/logging"
 	"github.com/spf13/cobra"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -47,7 +48,7 @@ to quickly create a Cobra application.`,
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		logging.Logger.Error(err)
 		os.Exit(1)
 	}
 }
@@ -58,12 +59,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rekor-server.yaml)")
 
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-
-	rootCmd.PersistentFlags().String("log_rpc_server", "localhost:8091", "Server address:port")
-	viper.BindPFlag("log_rpc_server", rootCmd.PersistentFlags().Lookup("log_rpc_server"))
-
-	rootCmd.PersistentFlags().Int64P("tlog_id", "", 6605482588949021371, "Trillian Log ID")
-	viper.BindPFlag("tlog_id", rootCmd.PersistentFlags().Lookup("tlog_id"))
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -79,15 +74,16 @@ func initConfig() {
 			os.Exit(1)
 		}
 
-		// Search config in home directory with name ".rekor-server" (without extension).
 		viper.AddConfigPath(home)
-		viper.SetConfigName(".rekor-server")
+		viper.AddConfigPath(".")
+		viper.SetConfigName("rekor-server")
+		viper.SetConfigType("yaml")
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
+		logging.Logger.Infof("Using config file: %s", viper.ConfigFileUsed())
 	}
 }

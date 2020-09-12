@@ -18,10 +18,10 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 
 	"github.com/projectrekor/rekor-server/logging"
 	"github.com/spf13/viper"
@@ -39,15 +39,9 @@ func NewServer() (*Server, error) {
 		return nil, err
 	}
 
-	var addr string
-	port := viper.GetString("port")
-
-	// allow port to be set as localhost:3000 in env during development to avoid "accept incoming network connection" request on restarts
-	if strings.Contains(port, ":") {
-		addr = port
-	} else {
-		addr = ":" + port
-	}
+	addr := fmt.Sprintf("%s:%d",
+		viper.GetString("rekor_server.address"),
+		viper.GetInt("rekor_server.port"))
 
 	srv := http.Server{
 		Addr:    addr,
