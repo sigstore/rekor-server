@@ -56,9 +56,11 @@ trillian_log_server:
 ```
 
 ## Build Rekor Server
+
 `go build`
 
 ## Start the rekor server
+
 ```
 ./rekor-server serve
 2020-09-12T16:32:22.705+0100	INFO	cmd/root.go:87	Using config file: /Users/lukehinds/go/src/github.com/projectrekor/rekor-server/rekor-server.yaml
@@ -68,10 +70,14 @@ trillian_log_server:
 
 ## Add an entry
 
-`echo > hello-rekor > /tmp/file.txt`
+```
+echo > hello-rekor > /tmp/file.txt
 
-`curl http://localhost:3000/add -F "fileupload=@/tmp/file.txt" -v`
+curl http://localhost:3000/api/v1/add -F "fileupload=@/tmp/file.txt" -v
+```
 
 ## Get an entry
 
-`curl http://localhost:3000/get -F "fileupload=@/tmp/file.txt" -v`
+```
+curl http://localhost:3000/apt/v1/get -F "fileupload=@/tmp/file.txt" -v
+```
