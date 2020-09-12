@@ -158,7 +158,7 @@ func (s *trillianclient) getLeaf(byteValue []byte, tlog_id int64) (*Response, er
 
 	for i, logLeaf := range resp.GetLeaves() {
 		leafValue := logLeaf.GetLeafValue()
-		logging.Logger.Infof("trillianclient:get] %d: %s", i, leafValue)
+		logging.Logger.Infof("trillianclient:get] %d: %s", i, string(leafValue))
 	}
 
 	return &Response{

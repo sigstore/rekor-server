@@ -71,7 +71,7 @@ trillian_log_server:
 ## Add an entry
 
 ```
-echo > hello-rekor > /tmp/file.txt
+echo hello-rekor > /tmp/file.txt
 
 curl http://localhost:3000/api/v1/add -F "fileupload=@/tmp/file.txt" -v
 ```
@@ -79,5 +79,5 @@ curl http://localhost:3000/api/v1/add -F "fileupload=@/tmp/file.txt" -v
 ## Get an entry
 
 ```
-curl http://localhost:3000/apt/v1/get -F "fileupload=@/tmp/file.txt" -v
+curl http://localhost:3000/api/v1/get -F "fileupload=@/tmp/file.txt" -v
 ```
