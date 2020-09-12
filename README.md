@@ -67,6 +67,7 @@ trillian_log_server:
 ```
 
 ## Add an entry
+
 `echo > hello-rekor > /tmp/file.txt`
 `curl http://localhost:3000/add -F "fileupload=@/tmp/file.txt" -v`
 
