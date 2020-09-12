@@ -28,6 +28,7 @@ import (
 	"os"
 
 	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"github.com/google/trillian"
 	"github.com/projectrekor/rekor-server/logging"
 	"github.com/spf13/viper"
@@ -161,8 +162,12 @@ func addHandler(w http.ResponseWriter, r *http.Request) {
 
 func New() (*chi.Mux, error) {
 	router := chi.NewRouter()
-	router.Post("/add", addHandler)
-	router.Post("/get", getHandler)
-	router.Get("/ping", ping)
+	router.Use(middleware.RequestID)
+	router.Use(middleware.Logger)
+	router.Use(middleware.Recoverer)
+
+	router.Post("/api/v1/add", addHandler)
+	router.Post("/api/v1/get", getHandler)
+	router.Get("/api/v1//ping", ping)
 	return router, nil
 }
