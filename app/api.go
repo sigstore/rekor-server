@@ -37,7 +37,68 @@ func ping(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "pong!")
 }
 
-func receiveHandler(w http.ResponseWriter, r *http.Request) {
+func getHandler(w http.ResponseWriter, r *http.Request) {
+	tLogID := viper.GetInt64("trillian_log_server.tlog_id")
+	logRpcServer := fmt.Sprintf("%s:%d",
+		viper.GetString("trillian_log_server.address"),
+		viper.GetInt("trillian_log_server.port"))
+	file, header, err := r.FormFile("fileupload")
+
+	if err != nil {
+		logging.Logger.Errorf("Error in r.FormFile ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "{'error': %s}", err)
+		return
+	}
+	defer file.Close()
+
+	out, err := os.Create(header.Filename)
+	if err != nil {
+		logging.Logger.Errorf("Unable to create the file for writing. Check your write access privilege.", err)
+		fmt.Fprintf(w, "Unable to create the file for writing. Check your write access privilege.", err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, file)
+	if err != nil {
+		logging.Logger.Errorf("Error copying file.", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// return that we have successfully uploaded our file!
+	fmt.Fprintf(w, "Successfully Uploaded File\n")
+	logging.Logger.Info("Received file : ", header.Filename)
+
+	// fetch an GPRC connection
+	connection, err := dial(logRpcServer)
+	if err != nil {
+		fmt.Printf("%+v\n", err)
+	}
+
+	leafFile, err := os.Open(header.Filename)
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	byteLeaf, _ := ioutil.ReadAll(leafFile)
+	defer leafFile.Close()
+
+	tLogClient := trillian.NewTrillianLogClient(connection)
+	server := serverInstance(tLogClient, tLogID)
+
+	resp := &Response{}
+
+	resp, err = server.getLeaf(byteLeaf, tLogID)
+	logging.Logger.Infof("Server PUT Response: %s", resp.status)
+	fmt.Fprintf(w, "Server PUT Response: %s", resp.status)
+
+}
+
+func addHandler(w http.ResponseWriter, r *http.Request) {
 	tLogID := viper.GetInt64("trillian_log_server.tlog_id")
 	logRpcServer := fmt.Sprintf("%s:%d",
 		viper.GetString("trillian_log_server.address"),
@@ -100,7 +161,8 @@ func receiveHandler(w http.ResponseWriter, r *http.Request) {
 
 func New() (*chi.Mux, error) {
 	router := chi.NewRouter()
-	router.Post("/add", receiveHandler)
+	router.Post("/add", addHandler)
+	router.Post("/get", getHandler)
 	router.Get("/ping", ping)
 	return router, nil
 }
