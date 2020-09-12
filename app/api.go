@@ -38,8 +38,10 @@ func ping(w http.ResponseWriter, r *http.Request) {
 }
 
 func receiveHandler(w http.ResponseWriter, r *http.Request) {
-	tLogID := viper.GetInt64("tlog_id")
-	logRpcServer := viper.GetString("log_rpc_server")
+	tLogID := viper.GetInt64("trillian_log_server.tlog_id")
+	logRpcServer := fmt.Sprintf("%s:%d",
+		viper.GetString("trillian_log_server.address"),
+		viper.GetInt("trillian_log_server.port"))
 	file, header, err := r.FormFile("fileupload")
 
 	if err != nil {

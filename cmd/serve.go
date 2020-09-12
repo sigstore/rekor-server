@@ -21,7 +21,6 @@ import (
 
 	"github.com/projectrekor/rekor-server/app"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // serveCmd represents the serve command
@@ -40,6 +39,5 @@ var serveCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(serveCmd)
-	viper.SetDefault("port", "localhost:3000")
-	viper.SetDefault("log_level", "debug")
+	//viper.SetDefault("port", "localhost:3000")
 }
