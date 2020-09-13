@@ -10,4 +10,5 @@ require (
 	github.com/spf13/viper v1.7.1
 	go.uber.org/zap v1.16.0
 	google.golang.org/grpc v1.32.0
+	google.golang.org/grpc/examples v0.0.0-20200910201057-6591123024b3 // indirect
 )

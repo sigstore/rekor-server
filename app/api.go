@@ -16,9 +16,7 @@ limitations under the License.
 
 package app
 
-// https://pace.dev/blog/2018/05/09/how-I-write-http-services-after-eight-years.html
-// https://github.com/dhax/go-base/blob/master/api/api.go
-// curl http://localhost:3000/add -F "fileupload=@/tmp/file" -vvv
+// curl http://localhost:3000/api/v1/add -F "fileupload=@/tmp/file" -vvv
 
 import (
 	"fmt"
@@ -97,7 +95,7 @@ func addHandler(w http.ResponseWriter, r *http.Request) {
 	out, err := os.Create(header.Filename)
 	if err != nil {
 		logging.Logger.Errorf("Unable to create the file for writing. Check your write access privilege.", err)
-		fmt.Fprintf(w, "Unable to create the file for writing. Check your write access privilege.", err)
+		fmt.Fprint(w, "Unable to create the file for writing. Check your write access privilege.", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 	defer out.Close()
