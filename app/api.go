@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 
@@ -53,21 +54,6 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	out, err := os.Create(header.Filename)
-	if err != nil {
-		logging.Logger.Errorf("Unable to create the file for writing. Check your write access privilege.", err)
-		fmt.Fprintf(w, "Unable to create the file for writing. Check your write access privilege.", err)
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, file)
-	if err != nil {
-		logging.Logger.Errorf("Error copying file.", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
 	// return that we have successfully uploaded our file!
 	fmt.Fprintf(w, "Successfully Uploaded File\n")
 	logging.Logger.Info("Received file : ", header.Filename)
@@ -78,15 +64,10 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("%+v\n", err)
 	}
 
-	leafFile, err := os.Open(header.Filename)
-
+	byteLeaf, err := ioutil.ReadAll(file)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
-
-	byteLeaf, _ := ioutil.ReadAll(leafFile)
-	defer leafFile.Close()
 
 	tLogClient := trillian.NewTrillianLogClient(connection)
 	server := serverInstance(tLogClient, tLogID)
@@ -95,8 +76,7 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err = server.getLeaf(byteLeaf, tLogID)
 	logging.Logger.Infof("Server PUT Response: %s", resp.status)
-	fmt.Fprintf(w, "Server PUT Response: %s", resp.status)
-
+	fmt.Fprintf(w, "Server PUT Response: %s\n", resp.status)
 }
 
 func addHandler(w http.ResponseWriter, r *http.Request) {
