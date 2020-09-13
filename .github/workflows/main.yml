@@ -54,4 +54,4 @@ jobs:
         uses: actions/checkout@v1
 
       - name: Build
-        run: "go build"
+        run: make build
