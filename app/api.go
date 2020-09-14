@@ -22,9 +22,7 @@ package app
 
 import (
 	"fmt"
-	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 
@@ -41,15 +39,10 @@ func ping(w http.ResponseWriter, r *http.Request) {
 
 func getHandler(w http.ResponseWriter, r *http.Request) {
 	tLogID := viper.GetInt64("trillian_log_server.tlog_id")
-	logRpcServer := fmt.Sprintf("%s:%d",
-		viper.GetString("trillian_log_server.address"),
-		viper.GetInt("trillian_log_server.port"))
 	file, header, err := r.FormFile("fileupload")
 
 	if err != nil {
-		logging.Logger.Errorf("Error in r.FormFile ", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "{'error': %s}", err)
+		writeError(w, err)
 		return
 	}
 	defer file.Close()
@@ -59,85 +52,83 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	logging.Logger.Info("Received file : ", header.Filename)
 
 	// fetch an GPRC connection
-	connection, err := dial(logRpcServer)
+	ctx := r.Context()
+	logRpcServer := fmt.Sprintf("%s:%d",
+		viper.GetString("trillian_log_server.address"),
+		viper.GetInt("trillian_log_server.port"))
+	connection, err := dial(ctx, logRpcServer)
 	if err != nil {
-		fmt.Printf("%+v\n", err)
+		writeError(w, err)
+		return
 	}
 
 	byteLeaf, err := ioutil.ReadAll(file)
 	if err != nil {
-		log.Fatal(err)
+		writeError(w, err)
+		return
 	}
 
 	tLogClient := trillian.NewTrillianLogClient(connection)
 	server := serverInstance(tLogClient, tLogID)
 
-	resp := &Response{}
-
-	resp, err = server.getLeaf(byteLeaf, tLogID)
+	resp, err := server.getLeaf(byteLeaf, tLogID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	logging.Logger.Infof("Server PUT Response: %s", resp.status)
 	fmt.Fprintf(w, "Server PUT Response: %s\n", resp.status)
 }
 
 func addHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	tLogID := viper.GetInt64("trillian_log_server.tlog_id")
-	logRpcServer := fmt.Sprintf("%s:%d",
-		viper.GetString("trillian_log_server.address"),
-		viper.GetInt("trillian_log_server.port"))
 	file, header, err := r.FormFile("fileupload")
 
 	if err != nil {
-		logging.Logger.Errorf("Error in r.FormFile ", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "{'error': %s}", err)
+		writeError(w, err)
 		return
 	}
 	defer file.Close()
-
-	out, err := os.Create(header.Filename)
-	if err != nil {
-		logging.Logger.Errorf("Unable to create the file for writing. Check your write access privilege.", err)
-		fmt.Fprintf(w, "Unable to create the file for writing. Check your write access privilege.", err)
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, file)
-	if err != nil {
-		logging.Logger.Errorf("Error copying file.", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
 
 	// return that we have successfully uploaded our file!
 	fmt.Fprintf(w, "Successfully Uploaded File\n")
 	logging.Logger.Info("Received file : ", header.Filename)
 
 	// fetch an GPRC connection
-	connection, err := dial(logRpcServer)
+	logRpcServer := fmt.Sprintf("%s:%d",
+		viper.GetString("trillian_log_server.address"),
+		viper.GetInt("trillian_log_server.port"))
+	connection, err := dial(ctx, logRpcServer)
 	if err != nil {
-		fmt.Printf("%+v\n", err)
+		writeError(w, err)
+		return
 	}
 
 	leafFile, err := os.Open(header.Filename)
-
+	defer leafFile.Close()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		writeError(w, err)
+		return
 	}
 
-	byteLeaf, _ := ioutil.ReadAll(leafFile)
-	defer leafFile.Close()
+	byteLeaf, err := ioutil.ReadAll(file)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 
 	tLogClient := trillian.NewTrillianLogClient(connection)
 	server := serverInstance(tLogClient, tLogID)
 
-	resp := &Response{}
-
-	resp, err = server.addLeaf(byteLeaf, tLogID)
+	resp, err := server.addLeaf(byteLeaf, tLogID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	logging.Logger.Infof("Server PUT Response: %s", resp.status)
 	fmt.Fprintf(w, "Server PUT Response: %s", resp.status)
-
 }
 
 func New() (*chi.Mux, error) {
@@ -150,4 +141,10 @@ func New() (*chi.Mux, error) {
 	router.Post("/api/v1/get", getHandler)
 	router.Get("/api/v1//ping", ping)
 	return router, nil
+}
+
+func writeError(w http.ResponseWriter, err error) {
+	logging.Logger.Error(err)
+	w.WriteHeader(http.StatusInternalServerError)
+	fmt.Fprintf(w, "Server error: %v\n", err)
 }
