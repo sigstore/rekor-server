@@ -21,23 +21,48 @@ package app
 // curl http://localhost:3000/add -F "fileupload=@/tmp/file" -vvv
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/trillian"
 	"github.com/projectrekor/rekor-server/logging"
 	"github.com/spf13/viper"
+	"google.golang.org/grpc"
 )
 
-func ping(w http.ResponseWriter, r *http.Request) {
+type API struct {
+	conn      *grpc.ClientConn
+	tLogID    int64
+	logClient trillian.TrillianLogClient
+}
+
+func NewAPI() (*API, error) {
+	tLogID := viper.GetInt64("trillian_log_server.tlog_id")
+	logRpcServer := fmt.Sprintf("%s:%d",
+		viper.GetString("trillian_log_server.address"),
+		viper.GetInt("trillian_log_server.port"))
+	conn, err := dial(context.Background(), logRpcServer)
+	if err != nil {
+		return nil, err
+	}
+
+	logClient := trillian.NewTrillianLogClient(conn)
+	return &API{
+		conn:      conn,
+		tLogID:    tLogID,
+		logClient: logClient,
+	}, nil
+}
+
+func (api *API) ping(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "pong!")
 }
 
-func getHandler(w http.ResponseWriter, r *http.Request) {
+func (api *API) getHandler(w http.ResponseWriter, r *http.Request) {
 	tLogID := viper.GetInt64("trillian_log_server.tlog_id")
 	file, header, err := r.FormFile("fileupload")
 
@@ -51,26 +76,13 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Successfully Uploaded File\n")
 	logging.Logger.Info("Received file : ", header.Filename)
 
-	// fetch an GPRC connection
-	ctx := r.Context()
-	logRpcServer := fmt.Sprintf("%s:%d",
-		viper.GetString("trillian_log_server.address"),
-		viper.GetInt("trillian_log_server.port"))
-	connection, err := dial(ctx, logRpcServer)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
 	byteLeaf, err := ioutil.ReadAll(file)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 
-	tLogClient := trillian.NewTrillianLogClient(connection)
-	server := serverInstance(tLogClient, tLogID)
-
+	server := serverInstance(api.logClient, api.tLogID)
 	resp, err := server.getLeaf(byteLeaf, tLogID)
 	if err != nil {
 		writeError(w, err)
@@ -80,10 +92,7 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Server PUT Response: %s\n", resp.status)
 }
 
-func addHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	tLogID := viper.GetInt64("trillian_log_server.tlog_id")
+func (api *API) addHandler(w http.ResponseWriter, r *http.Request) {
 	file, header, err := r.FormFile("fileupload")
 
 	if err != nil {
@@ -96,33 +105,15 @@ func addHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Successfully Uploaded File\n")
 	logging.Logger.Info("Received file : ", header.Filename)
 
-	// fetch an GPRC connection
-	logRpcServer := fmt.Sprintf("%s:%d",
-		viper.GetString("trillian_log_server.address"),
-		viper.GetInt("trillian_log_server.port"))
-	connection, err := dial(ctx, logRpcServer)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	leafFile, err := os.Open(header.Filename)
-	defer leafFile.Close()
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
 	byteLeaf, err := ioutil.ReadAll(file)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 
-	tLogClient := trillian.NewTrillianLogClient(connection)
-	server := serverInstance(tLogClient, tLogID)
+	server := serverInstance(api.logClient, api.tLogID)
 
-	resp, err := server.addLeaf(byteLeaf, tLogID)
+	resp, err := server.addLeaf(byteLeaf, api.tLogID)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -137,9 +128,13 @@ func New() (*chi.Mux, error) {
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
 
-	router.Post("/api/v1/add", addHandler)
-	router.Post("/api/v1/get", getHandler)
-	router.Get("/api/v1//ping", ping)
+	api, err := NewAPI()
+	if err != nil {
+		return nil, err
+	}
+	router.Post("/api/v1/add", api.addHandler)
+	router.Post("/api/v1/get", api.getHandler)
+	router.Get("/api/v1//ping", api.ping)
 	return router, nil
 }
 
