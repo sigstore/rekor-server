@@ -41,16 +41,27 @@ type API struct {
 }
 
 func NewAPI() (*API, error) {
-	tLogID := viper.GetInt64("trillian_log_server.tlog_id")
 	logRpcServer := fmt.Sprintf("%s:%d",
 		viper.GetString("trillian_log_server.address"),
 		viper.GetInt("trillian_log_server.port"))
-	conn, err := dial(context.Background(), logRpcServer)
+	ctx := context.Background()
+	conn, err := dial(ctx, logRpcServer)
 	if err != nil {
 		return nil, err
 	}
-
+	adminClient := trillian.NewTrillianAdminClient(conn)
 	logClient := trillian.NewTrillianLogClient(conn)
+
+	tLogID := viper.GetInt64("trillian_log_server.tlog_id")
+
+	if tLogID == 0 {
+		t, err := createAndInitTree(ctx, adminClient, logClient)
+		if err != nil {
+			return nil, err
+		}
+		tLogID = t.TreeId
+	}
+
 	return &API{
 		conn:      conn,
 		tLogID:    tLogID,
@@ -63,7 +74,6 @@ func (api *API) ping(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) getHandler(w http.ResponseWriter, r *http.Request) {
-	tLogID := viper.GetInt64("trillian_log_server.tlog_id")
 	file, header, err := r.FormFile("fileupload")
 
 	if err != nil {
@@ -83,7 +93,7 @@ func (api *API) getHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	server := serverInstance(api.logClient, api.tLogID)
-	resp, err := server.getLeaf(byteLeaf, tLogID)
+	resp, err := server.getLeaf(byteLeaf, api.tLogID)
 	if err != nil {
 		writeError(w, err)
 		return
