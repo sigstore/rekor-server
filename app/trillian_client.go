@@ -176,8 +176,10 @@ func createAndInitTree(ctx context.Context, adminClient trillian.TrillianAdminCl
 		return nil, err
 	}
 
-	if len(trees.Tree) >= 1 {
-		return trees.Tree[0], nil
+	for _, t := range trees.Tree {
+		if t.TreeType == trillian.TreeType_LOG {
+			return t, nil
+		}
 	}
 
 	// Otherwise create and initialize one
@@ -201,6 +203,45 @@ func createAndInitTree(ctx context.Context, adminClient trillian.TrillianAdminCl
 	}
 
 	if err := client.InitLog(ctx, t, logClient); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+func createAndInitMap(ctx context.Context, adminClient trillian.TrillianAdminClient, mapClient trillian.TrillianMapClient) (*trillian.Tree, error) {
+	// First look for and use an existing tree
+	trees, err := adminClient.ListTrees(ctx, &trillian.ListTreesRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, t := range trees.Tree {
+		if t.TreeType == trillian.TreeType_MAP {
+			return t, nil
+		}
+	}
+
+	// Otherwise create and initialize one
+	t, err := adminClient.CreateTree(ctx, &trillian.CreateTreeRequest{
+		Tree: &trillian.Tree{
+			TreeType:           trillian.TreeType_MAP,
+			HashStrategy:       trillian.HashStrategy_CONIKS_SHA256,
+			HashAlgorithm:      sigpb.DigitallySigned_SHA256,
+			SignatureAlgorithm: sigpb.DigitallySigned_ECDSA,
+			TreeState:          trillian.TreeState_ACTIVE,
+			MaxRootDuration:    ptypes.DurationProto(time.Hour),
+		},
+		KeySpec: &keyspb.Specification{
+			Params: &keyspb.Specification_EcdsaParams{
+				EcdsaParams: &keyspb.Specification_ECDSA{},
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := client.InitMap(ctx, t, mapClient); err != nil {
 		return nil, err
 	}
 	return t, nil

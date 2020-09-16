@@ -31,13 +31,12 @@ import (
 	"github.com/google/trillian"
 	"github.com/projectrekor/rekor-server/logging"
 	"github.com/spf13/viper"
-	"google.golang.org/grpc"
 )
 
 type API struct {
-	conn      *grpc.ClientConn
 	tLogID    int64
 	logClient trillian.TrillianLogClient
+	mapClient trillian.TrillianMapClient
 }
 
 func NewAPI() (*API, error) {
@@ -45,27 +44,44 @@ func NewAPI() (*API, error) {
 		viper.GetString("trillian_log_server.address"),
 		viper.GetInt("trillian_log_server.port"))
 	ctx := context.Background()
-	conn, err := dial(ctx, logRpcServer)
+	tConn, err := dial(ctx, logRpcServer)
 	if err != nil {
 		return nil, err
 	}
-	adminClient := trillian.NewTrillianAdminClient(conn)
-	logClient := trillian.NewTrillianLogClient(conn)
+	logAdminClient := trillian.NewTrillianAdminClient(tConn)
+	logClient := trillian.NewTrillianLogClient(tConn)
 
 	tLogID := viper.GetInt64("trillian_log_server.tlog_id")
-
 	if tLogID == 0 {
-		t, err := createAndInitTree(ctx, adminClient, logClient)
+		t, err := createAndInitTree(ctx, logAdminClient, logClient)
 		if err != nil {
 			return nil, err
 		}
 		tLogID = t.TreeId
 	}
 
+	mapRpcServer := fmt.Sprintf("%s:%d",
+		viper.GetString("trillian_map_server.address"),
+		viper.GetInt("trillian_map_server.port"))
+	mConn, err := dial(ctx, mapRpcServer)
+	if err != nil {
+		return nil, err
+	}
+	mapAdminClient := trillian.NewTrillianAdminClient(mConn)
+	mapClient := trillian.NewTrillianMapClient(mConn)
+	tMapID := viper.GetInt64("trillian_map_server.tmap_id")
+	if tMapID == 0 {
+		t, err := createAndInitMap(ctx, mapAdminClient, mapClient)
+		if err != nil {
+			return nil, err
+		}
+		tMapID = t.TreeId
+	}
+
 	return &API{
-		conn:      conn,
 		tLogID:    tLogID,
 		logClient: logClient,
+		mapClient: mapClient,
 	}, nil
 }
 
