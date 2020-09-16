@@ -21,10 +21,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/golang/protobuf/ptypes"
 	"github.com/projectrekor/rekor-server/logging"
 
 	"github.com/google/trillian"
 	"github.com/google/trillian/client"
+	"github.com/google/trillian/crypto/keyspb"
+	"github.com/google/trillian/crypto/sigpb"
 	"github.com/google/trillian/merkle"
 	"github.com/google/trillian/merkle/rfc6962"
 	"github.com/google/trillian/types"
@@ -164,4 +167,41 @@ func (s *trillianclient) getLeaf(byteValue []byte, tlog_id int64) (*Response, er
 	return &Response{
 		status: "OK",
 	}, nil
+}
+
+func createAndInitTree(ctx context.Context, adminClient trillian.TrillianAdminClient, logClient trillian.TrillianLogClient) (*trillian.Tree, error) {
+	// First look for and use an existing tree
+	trees, err := adminClient.ListTrees(ctx, &trillian.ListTreesRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(trees.Tree) >= 1 {
+		return trees.Tree[0], nil
+	}
+
+	// Otherwise create and initialize one
+	t, err := adminClient.CreateTree(ctx, &trillian.CreateTreeRequest{
+		Tree: &trillian.Tree{
+			TreeType:           trillian.TreeType_LOG,
+			HashStrategy:       trillian.HashStrategy_RFC6962_SHA256,
+			HashAlgorithm:      sigpb.DigitallySigned_SHA256,
+			SignatureAlgorithm: sigpb.DigitallySigned_ECDSA,
+			TreeState:          trillian.TreeState_ACTIVE,
+			MaxRootDuration:    ptypes.DurationProto(time.Hour),
+		},
+		KeySpec: &keyspb.Specification{
+			Params: &keyspb.Specification_EcdsaParams{
+				EcdsaParams: &keyspb.Specification_ECDSA{},
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := client.InitLog(ctx, t, logClient); err != nil {
+		return nil, err
+	}
+	return t, nil
 }
