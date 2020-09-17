@@ -22,6 +22,7 @@ To run rekor you need to build trillian
 go get github.com/google/trillian.git
 go build ./cmd/trillian_log_server
 go build ./cmd/trillian_log_signer
+go build ./cmd/trillian_map_server
 go build ./cmd/createtree/
 
 ```
@@ -38,21 +39,10 @@ trillian_log_server -http_endpoint=localhost:8090 -rpc_endpoint=localhost:8091 -
 trillian_log_signer --logtostderr --force_master --http_endpoint=localhost:8190 -rpc_endpoint=localhost:8191  --batch_size=1000 --sequencer_guard_window=0 --sequencer_interval=200ms
 ```
 
-## Create a tree (note the return value)
+### Start the tlog signer
 
 ```
-./createtree --admin_server=localhost:8091 > logid
-cat logid
-2587331608088442751
-```
-
-## Add tlog_id to the rekor-server.yaml
-
-```
-trillian_log_server:
-  address: "127.0.0.1"
-  port: 8091
-  tlog_id: 2587331608088442751
+trillian_map_server --logtostderr --http_endpoint=localhost:8094  --rpc_endpoint=localhost:8093
 ```
 
 ## Build Rekor Server
