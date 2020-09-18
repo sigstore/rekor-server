@@ -58,7 +58,7 @@ type FileRecieved struct {
 }
 
 type ServerResponse struct {
-	Status string `json:"status"`
+	Status string `json:"server_status"`
 }
 
 func NewAPI() (*API, error) {
@@ -238,7 +238,7 @@ func (api *API) addHandler(w http.ResponseWriter, r *http.Request) {
 	var codeRes RespCodeJson
 	switch resp.code {
 	case codes.OK:
-		codeRes = RespCodeJson{Code: "File Logged"}
+		codeRes = RespCodeJson{Code: "OK"}
 	case codes.AlreadyExists:
 		codeRes = RespCodeJson{Code: "Data Already Exists!"}
 	default:
@@ -251,6 +251,9 @@ func (api *API) addHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(CodeJson))
 
+	ServerResponseVar := ServerResponse{Status: resp.status}
+	ServerResponseJson, err := json.Marshal(ServerResponseVar)
+	fmt.Fprintf(w, string(ServerResponseJson))
 	logging.Logger.Infof("Server PUT Response: %s", resp.status)
 }
 
