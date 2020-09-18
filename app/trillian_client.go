@@ -42,8 +42,10 @@ type trillianclient struct {
 }
 
 type Response struct {
-	status   string
-	leafhash string
+	status         string
+	code           codes.Code
+	getLeafResult  *trillian.GetLeavesByHashResponse
+	getProofResult *trillian.GetInclusionProofByHashResponse
 }
 
 func serverInstance(client trillian.TrillianLogClient, tLogID int64) *trillianclient {
@@ -68,7 +70,7 @@ func (s *trillianclient) root() (types.LogRootV1, error) {
 	return root, nil
 }
 
-func (s *trillianclient) getInclusion(byteValue []byte, tLogID int64) (*Response, error) {
+func (s *trillianclient) getProof(byteValue []byte, tLogID int64) (*Response, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -77,7 +79,7 @@ func (s *trillianclient) getInclusion(byteValue []byte, tLogID int64) (*Response
 		return &Response{}, err
 	}
 
-	logging.Logger.Info("Root hash: %x", root.RootHash)
+	// logging.Logger.Infof("Root hash: %x", root.RootHash)
 
 	hasher := rfc6962.DefaultHasher
 	leafHash := hasher.HashLeaf(byteValue)
@@ -88,17 +90,6 @@ func (s *trillianclient) getInclusion(byteValue []byte, tLogID int64) (*Response
 			LeafHash: leafHash,
 			TreeSize: int64(root.TreeSize),
 		})
-
-	if err != nil {
-		logging.Logger.Error(codes.Internal, "failed to get inclusion proof: %v", err)
-		return &Response{}, nil
-	}
-	if err != nil {
-		return &Response{}, err
-	}
-	if len(resp.Proof) < 1 {
-		return &Response{}, nil
-	}
 
 	v := merkle.NewLogVerifier(rfc6962.DefaultHasher)
 
@@ -113,7 +104,8 @@ func (s *trillianclient) getInclusion(byteValue []byte, tLogID int64) (*Response
 	}
 
 	return &Response{
-		status: "OK",
+		status:         "OK",
+		getProofResult: resp,
 	}, nil
 }
 
@@ -130,18 +122,11 @@ func (s *trillianclient) addLeaf(byteValue []byte, tLogID int64) (*Response, err
 		fmt.Println(err)
 	}
 
-	c := codes.Code(resp.QueuedLeaf.GetStatus().GetCode())
-	if c != codes.OK && c != codes.AlreadyExists {
-		logging.Logger.Error("Server Status: Bad status: %v", resp.QueuedLeaf.GetStatus())
-	}
-	if c == codes.OK {
-		logging.Logger.Info("Server status: ok")
-	} else if c == codes.AlreadyExists {
-		logging.Logger.Info("Data already Exists")
-	}
+	resultCode := codes.Code(resp.QueuedLeaf.GetStatus().GetCode())
 
 	return &Response{
 		status: "OK",
+		code:   resultCode,
 	}, nil
 }
 
@@ -159,13 +144,9 @@ func (s *trillianclient) getLeaf(byteValue []byte, tlog_id int64) (*Response, er
 		logging.Logger.Fatal(err)
 	}
 
-	for i, logLeaf := range resp.GetLeaves() {
-		leafValue := logLeaf.GetLeafValue()
-		logging.Logger.Infof("trillianclient:get] %d: %s", i, string(leafValue))
-	}
-
 	return &Response{
-		status: "OK",
+		status:        "OK",
+		getLeafResult: resp,
 	}, nil
 }
 
