@@ -111,12 +111,16 @@ func (api *API) ping(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "pong!")
 }
 
-func (api *API) getHandler(w http.ResponseWriter, r *http.Request) {
-	file, header, err := r.FormFile("fileupload")
+type getResponse struct {
+	ServerResponse ServerResponse
+	FileRecieved   FileRecieved
+	Leaves         []*trillian.LogLeaf
+}
 
+func (api *API) getHandler(r *http.Request) (interface{}, error) {
+	file, header, err := r.FormFile("fileupload")
 	if err != nil {
-		writeError(w, err)
-		return
+		return nil, err
 	}
 	defer file.Close()
 
@@ -124,55 +128,36 @@ func (api *API) getHandler(w http.ResponseWriter, r *http.Request) {
 
 	byteLeaf, err := ioutil.ReadAll(file)
 	if err != nil {
-		writeError(w, err)
-		return
+		return nil, err
 	}
 
 	server := serverInstance(api.logClient, api.tLogID)
 	resp, err := server.getLeaf(byteLeaf, api.tLogID)
 	if err != nil {
-		writeError(w, err)
-		return
+		return nil, err
 	}
-
 	logging.Logger.Infof("TLOG Response: %s", resp.status)
 
-	w.Header().Set("Content-Type", "application/json")
-	// Return Server Response as JSON
-	ServerResponseVar := ServerResponse{Status: resp.status}
-	ServerResponseJson, err := json.Marshal(ServerResponseVar)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	fmt.Fprintf(w, string(ServerResponseJson))
-
-	// Return File Recieved as JSON
-	FileRecievedVar := FileRecieved{File: header.Filename}
-	FileRecievedJson, err := json.Marshal(FileRecievedVar)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	fmt.Fprintf(w, string(FileRecievedJson))
-
 	logResults := resp.getLeafResult.GetLeaves()
-	byte, err := json.Marshal(logResults)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	fmt.Fprint(w, string(byte))
+	logging.Logger.Info("Get Entry Result: ", logResults)
 
-	logging.Logger.Info("Get Entry Result: ", (string(byte)))
+	return getResponse{
+		ServerResponse: ServerResponse{Status: resp.status},
+		FileRecieved:   FileRecieved{File: header.Filename},
+		Leaves:         logResults,
+	}, nil
 }
 
-func (api *API) getProofHandler(w http.ResponseWriter, r *http.Request) {
-	file, header, err := r.FormFile("fileupload")
+type getProofResponse struct {
+	ServerResponse ServerResponse
+	FileRecieved   FileRecieved
+	Proof          *trillian.GetInclusionProofByHashResponse
+}
 
+func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
+	file, header, err := r.FormFile("fileupload")
 	if err != nil {
-		writeError(w, err)
-		return
+		return nil, err
 	}
 	defer file.Close()
 
@@ -180,45 +165,38 @@ func (api *API) getProofHandler(w http.ResponseWriter, r *http.Request) {
 
 	byteLeaf, err := ioutil.ReadAll(file)
 	if err != nil {
-		writeError(w, err)
-		return
+		return nil, err
 	}
 
 	server := serverInstance(api.logClient, api.tLogID)
 	resp, err := server.getProof(byteLeaf, api.tLogID)
 	if err != nil {
-		writeError(w, err)
-		return
+		return nil, err
 	}
 
 	logging.Logger.Infof("TLOG PUT Response: %s", resp.status)
 
-	w.Header().Set("Content-Type", "application/json")
-	// Return Server Response as JSON
-	ServerResponseVar := ServerResponse{Status: resp.status}
-	ServerResponseJson, err := json.Marshal(ServerResponseVar)
-	fmt.Fprintf(w, string(ServerResponseJson))
-
-	// Return File Recieved as JSON
-	FileRecievedVar := FileRecieved{File: header.Filename}
-	FileRecievedJson, err := json.Marshal(FileRecievedVar)
-	fmt.Fprintf(w, string(FileRecievedJson))
-
 	// Return TLOG Results as JSON
 	logResults := resp.getProofResult
-	byte, err := json.Marshal(logResults)
-	fmt.Fprint(w, string(byte))
 
-	logging.Logger.Info("Get Entry Result: ", (string(byte)))
+	logging.Logger.Info("Get Entry Result: ", logResults)
+	return getProofResponse{
+		ServerResponse: ServerResponse{Status: resp.status},
+		FileRecieved:   FileRecieved{File: header.Filename},
+		Proof:          logResults,
+	}, nil
 
 }
 
-func (api *API) addHandler(w http.ResponseWriter, r *http.Request) {
+type addResponse struct {
+	RespCodeJson   RespCodeJson
+	ServerResponse ServerResponse
+}
+
+func (api *API) addHandler(r *http.Request) (interface{}, error) {
 	file, header, err := r.FormFile("fileupload")
-	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
-		writeError(w, err)
-		return
+		return nil, err
 	}
 	defer file.Close()
 
@@ -226,16 +204,14 @@ func (api *API) addHandler(w http.ResponseWriter, r *http.Request) {
 
 	byteLeaf, err := ioutil.ReadAll(file)
 	if err != nil {
-		writeError(w, err)
-		return
+		return nil, err
 	}
 
 	server := serverInstance(api.logClient, api.tLogID)
 
 	resp, err := server.addLeaf(byteLeaf, api.tLogID)
 	if err != nil {
-		writeError(w, err)
-		return
+		return nil, err
 	}
 
 	var codeRes RespCodeJson
@@ -248,17 +224,29 @@ func (api *API) addHandler(w http.ResponseWriter, r *http.Request) {
 		codeRes = RespCodeJson{Code: "Server Error!"}
 	}
 
-	CodeJson, err := json.Marshal(codeRes)
-	if err != nil {
-		logging.Logger.Error(err)
-		return
-	}
-	fmt.Fprintf(w, string(CodeJson))
-
-	ServerResponseVar := ServerResponse{Status: resp.status}
-	ServerResponseJson, err := json.Marshal(ServerResponseVar)
-	fmt.Fprintf(w, string(ServerResponseJson))
 	logging.Logger.Infof("Server PUT Response: %s", resp.status)
+	return addResponse{
+		ServerResponse: ServerResponse{Status: resp.status},
+		RespCodeJson:   codeRes,
+	}, nil
+}
+
+type apiHandler func(r *http.Request) (interface{}, error)
+
+func wrap(h apiHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		respObj, err := h(r)
+		if err != nil {
+			writeError(w, err)
+		}
+		b, err := json.Marshal(respObj)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, string(b))
+	}
 }
 
 func New() (*chi.Mux, error) {
@@ -271,9 +259,9 @@ func New() (*chi.Mux, error) {
 	if err != nil {
 		return nil, err
 	}
-	router.Post("/api/v1/add", api.addHandler)
-	router.Post("/api/v1/get", api.getHandler)
-	router.Post("/api/v1/getproof", api.getProofHandler)
+	router.Post("/api/v1/add", wrap(api.addHandler))
+	router.Post("/api/v1/get", wrap(api.getHandler))
+	router.Post("/api/v1/getproof", wrap(api.getProofHandler))
 	router.Get("/api/v1//ping", api.ping)
 	return router, nil
 }
