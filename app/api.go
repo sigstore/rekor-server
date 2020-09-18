@@ -50,7 +50,7 @@ type RespCode struct {
 }
 
 type RespCodeJson struct {
-	Code string `json:"status"`
+	Code string `json:"status_code"`
 }
 
 type FileRecieved struct {
@@ -143,6 +143,7 @@ func (api *API) getHandler(w http.ResponseWriter, r *http.Request) {
 	ServerResponseJson, err := json.Marshal(ServerResponseVar)
 	if err != nil {
 		writeError(w, err)
+		return
 	}
 	fmt.Fprintf(w, string(ServerResponseJson))
 
@@ -151,6 +152,7 @@ func (api *API) getHandler(w http.ResponseWriter, r *http.Request) {
 	FileRecievedJson, err := json.Marshal(FileRecievedVar)
 	if err != nil {
 		writeError(w, err)
+		return
 	}
 	fmt.Fprintf(w, string(FileRecievedJson))
 
@@ -158,6 +160,7 @@ func (api *API) getHandler(w http.ResponseWriter, r *http.Request) {
 	byte, err := json.Marshal(logResults)
 	if err != nil {
 		writeError(w, err)
+		return
 	}
 	fmt.Fprint(w, string(byte))
 
@@ -247,7 +250,8 @@ func (api *API) addHandler(w http.ResponseWriter, r *http.Request) {
 
 	CodeJson, err := json.Marshal(codeRes)
 	if err != nil {
-		logging.Logger.Fatal(err)
+		logging.Logger.Error(err)
+		return
 	}
 	fmt.Fprintf(w, string(CodeJson))
 
