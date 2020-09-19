@@ -30,6 +30,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/trillian"
+	"github.com/google/trillian/crypto/keyspb"
 	"github.com/projectrekor/rekor-server/logging"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc/codes"
@@ -39,6 +40,7 @@ type API struct {
 	tLogID    int64
 	logClient trillian.TrillianLogClient
 	mapClient trillian.TrillianMapClient
+	pubkey    *keyspb.PublicKey
 }
 
 // type RespCode struct {
@@ -100,10 +102,18 @@ func NewAPI() (*API, error) {
 		tMapID = t.TreeId
 	}
 
+	t, err := logAdminClient.GetTree(ctx, &trillian.GetTreeRequest{
+		TreeId: tLogID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &API{
 		tLogID:    tLogID,
 		logClient: logClient,
 		mapClient: mapClient,
+		pubkey:    t.PublicKey,
 	}, nil
 }
 
@@ -139,7 +149,6 @@ func (api *API) getHandler(r *http.Request) (interface{}, error) {
 	logging.Logger.Infof("TLOG Response: %s", resp.status)
 
 	logResults := resp.getLeafResult.GetLeaves()
-	logging.Logger.Info("Get Entry Result: ", logResults)
 
 	return getResponse{
 		ServerResponse: ServerResponse{Status: resp.status},
@@ -152,6 +161,7 @@ type getProofResponse struct {
 	ServerResponse ServerResponse
 	FileRecieved   FileRecieved
 	Proof          *trillian.GetInclusionProofByHashResponse
+	Key            []byte
 }
 
 func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
@@ -180,10 +190,12 @@ func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 	logResults := resp.getProofResult
 
 	logging.Logger.Info("Get Entry Result: ", logResults)
+	logging.Logger.Info(string(api.pubkey.Der))
 	return getProofResponse{
 		ServerResponse: ServerResponse{Status: resp.status},
 		FileRecieved:   FileRecieved{File: header.Filename},
 		Proof:          logResults,
+		Key:            api.pubkey.Der,
 	}, nil
 
 }
