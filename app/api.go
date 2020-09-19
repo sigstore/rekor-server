@@ -186,15 +186,15 @@ func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 
 	logging.Logger.Infof("TLOG PUT Response: %s", resp.status)
 
-	// Return TLOG Results as JSON
-	logResults := resp.getProofResult
+	proofResults := resp.getProofResult
+	proofResultsJSON, err := json.Marshal(proofResults)
 
-	logging.Logger.Info("Get Entry Result: ", logResults)
-	logging.Logger.Info(string(api.pubkey.Der))
+	logging.Logger.Info("Return Proof Result: ", string(proofResultsJSON))
+
 	return getProofResponse{
 		ServerResponse: ServerResponse{Status: resp.status},
 		FileRecieved:   FileRecieved{File: header.Filename},
-		Proof:          logResults,
+		Proof:          proofResults,
 		Key:            api.pubkey.Der,
 	}, nil
 
