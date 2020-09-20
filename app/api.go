@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -261,6 +262,37 @@ func wrap(h apiHandler) http.HandlerFunc {
 	}
 }
 
+type latestResponse struct {
+	Proof *trillian.GetLatestSignedLogRootResponse
+	Key   []byte
+}
+
+func (api *API) latestHandler(r *http.Request) (interface{}, error) {
+	lastSizeInt := int64(0)
+	lastSize := r.URL.Query().Get("lastSize")
+	logging.Logger.Info(lastSize)
+	if lastSize != "" {
+		var err error
+		lastSizeInt, err = strconv.ParseInt(lastSize, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+	}
+	resp, err := api.logClient.GetLatestSignedLogRoot(r.Context(), &trillian.GetLatestSignedLogRootRequest{
+		LogId:         api.tLogID,
+		FirstTreeSize: lastSizeInt,
+	})
+	if err != nil {
+		return nil, err
+	}
+	logging.Logger.Info(resp)
+
+	return latestResponse{
+		Proof: resp,
+		Key:   api.pubkey.Der,
+	}, nil
+}
+
 func New() (*chi.Mux, error) {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
@@ -274,6 +306,7 @@ func New() (*chi.Mux, error) {
 	router.Post("/api/v1/add", wrap(api.addHandler))
 	router.Post("/api/v1/get", wrap(api.getHandler))
 	router.Post("/api/v1/getproof", wrap(api.getProofHandler))
+	router.Post("/api/v1/latest", wrap(api.latestHandler))
 	router.Get("/api/v1//ping", api.ping)
 	return router, nil
 }
