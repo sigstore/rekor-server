@@ -16,10 +16,6 @@ limitations under the License.
 
 package app
 
-// https://pace.dev/blog/2018/05/09/how-I-write-http-services-after-eight-years.html
-// https://github.com/dhax/go-base/blob/master/api/api.go
-// curl http://localhost:3000/add -F "fileupload=@/tmp/file" -vvv
-
 import (
 	"context"
 	"encoding/json"
@@ -43,10 +39,6 @@ type API struct {
 	mapClient trillian.TrillianMapClient
 	pubkey    *keyspb.PublicKey
 }
-
-// type RespCode struct {
-// 	Code codes.Code
-// }
 
 type RespCode struct {
 	Code codes.Code
@@ -270,7 +262,7 @@ type latestResponse struct {
 func (api *API) latestHandler(r *http.Request) (interface{}, error) {
 	lastSizeInt := int64(0)
 	lastSize := r.URL.Query().Get("lastSize")
-	logging.Logger.Info(lastSize)
+	logging.Logger.Info("Last Tree Recieved: ", lastSize)
 	if lastSize != "" {
 		var err error
 		lastSizeInt, err = strconv.ParseInt(lastSize, 10, 64)
@@ -285,7 +277,11 @@ func (api *API) latestHandler(r *http.Request) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	logging.Logger.Info(resp)
+	respJSON, err := json.Marshal(resp.SignedLogRoot)
+	if err != nil {
+		return nil, err
+	}
+	logging.Logger.Info("Return Latest Log Root:", string(respJSON))
 
 	return latestResponse{
 		Proof: resp,
