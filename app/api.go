@@ -16,10 +16,6 @@ limitations under the License.
 
 package app
 
-// https://pace.dev/blog/2018/05/09/how-I-write-http-services-after-eight-years.html
-// https://github.com/dhax/go-base/blob/master/api/api.go
-// curl http://localhost:3000/add -F "fileupload=@/tmp/file" -vvv
-
 import (
 	"context"
 	"encoding/json"
