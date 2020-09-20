@@ -312,8 +312,6 @@ func (api *API) getleafHandler(r *http.Request) (interface{}, error) {
 		}
 	}
 
-	// error check leaf index
-
 	resp, err := api.logClient.GetLeavesByIndex(r.Context(), &trillian.GetLeavesByIndexRequest{
 		LogId:     api.tLogID,
 		LeafIndex: []int64{leafSizeInt},
