@@ -44,10 +44,6 @@ type API struct {
 	pubkey    *keyspb.PublicKey
 }
 
-// type RespCode struct {
-// 	Code codes.Code
-// }
-
 type RespCode struct {
 	Code codes.Code
 }
@@ -270,7 +266,7 @@ type latestResponse struct {
 func (api *API) latestHandler(r *http.Request) (interface{}, error) {
 	lastSizeInt := int64(0)
 	lastSize := r.URL.Query().Get("lastSize")
-	logging.Logger.Info(lastSize)
+	logging.Logger.Info("Last Tree Recieved: ", lastSize)
 	if lastSize != "" {
 		var err error
 		lastSizeInt, err = strconv.ParseInt(lastSize, 10, 64)
@@ -285,7 +281,11 @@ func (api *API) latestHandler(r *http.Request) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	logging.Logger.Info(resp)
+	respJSON, err := json.Marshal(resp.SignedLogRoot)
+	if err != nil {
+		return nil, err
+	}
+	logging.Logger.Info("Return Latest Log Root:", string(respJSON))
 
 	return latestResponse{
 		Proof: resp,
