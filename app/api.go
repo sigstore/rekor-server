@@ -324,6 +324,7 @@ func (api *API) getleafHandler(r *http.Request) (interface{}, error) {
 
 	return getLeafResponse{
 		Leaf: resp,
+		Key:  api.pubkey.Der,
 	}, nil
 }
 
