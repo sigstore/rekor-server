@@ -289,6 +289,41 @@ func (api *API) latestHandler(r *http.Request) (interface{}, error) {
 	}, nil
 }
 
+type getLeafResponse struct {
+	Leaf *trillian.GetLeavesByIndexResponse
+	Key  []byte
+}
+
+func (api *API) getleafHandler(r *http.Request) (interface{}, error) {
+	leafSizeInt := int64(0)
+	leafIndex := r.URL.Query().Get("leafindex")
+
+	// error check leaf index
+
+	if leafIndex != "" {
+		var err error
+		leafSizeInt, err = strconv.ParseInt(leafIndex, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	resp, err := api.logClient.GetLeavesByIndex(r.Context(), &trillian.GetLeavesByIndexRequest{
+		LogId:     api.tLogID,
+		LeafIndex: []int64{leafSizeInt},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	logging.Logger.Info(resp)
+
+	return getLeafResponse{
+		Leaf: resp,
+		Key:  api.pubkey.Der,
+	}, nil
+}
+
 func New() (*chi.Mux, error) {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
@@ -303,6 +338,7 @@ func New() (*chi.Mux, error) {
 	router.Post("/api/v1/get", wrap(api.getHandler))
 	router.Post("/api/v1/getproof", wrap(api.getProofHandler))
 	router.Post("/api/v1/latest", wrap(api.latestHandler))
+	router.Get("/api/v1/getleaf", wrap(api.getleafHandler))
 	router.Get("/api/v1//ping", api.ping)
 	return router, nil
 }
