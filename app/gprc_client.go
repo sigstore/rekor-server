@@ -22,12 +22,13 @@ func dial(ctx context.Context, rpcServer string) (*grpc.ClientConn, error) {
 }
 
 func getGprcCode(state codes.Code) string {
+	// more entries available here: https://github.com/grpc/grpc-go/blob/e6c98a478e62a717b945eb60edb115faf65215d3/codes/codes.go#L198
 	var codeResponse string
 	switch state {
 	case codes.OK:
 		codeResponse = "OK"
 	case codes.NotFound:
-		codeResponse = "Leaf not Found"
+		codeResponse = "Entry not Found"
 	case codes.AlreadyExists:
 		codeResponse = "Data Already Exists"
 	default:

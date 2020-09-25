@@ -52,8 +52,15 @@ type FileRecieved struct {
 }
 
 type latestResponse struct {
-	Proof *trillian.GetLatestSignedLogRootResponse
-	Key   []byte
+	Status RespStatusCode
+	Proof  *trillian.GetLatestSignedLogRootResponse
+	Key    []byte
+}
+
+type getResponse struct {
+	Status       RespStatusCode
+	FileRecieved FileRecieved
+	Leaves       []*trillian.LogLeaf
 }
 
 type getProofResponse struct {
@@ -121,11 +128,6 @@ func (api *API) ping(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "pong!")
 }
 
-type getResponse struct {
-	FileRecieved FileRecieved
-	Leaves       []*trillian.LogLeaf
-}
-
 func (api *API) getHandler(r *http.Request) (interface{}, error) {
 	file, header, err := r.FormFile("fileupload")
 	if err != nil {
@@ -148,8 +150,10 @@ func (api *API) getHandler(r *http.Request) (interface{}, error) {
 	logging.Logger.Infof("TLOG Response: %s", resp.status)
 
 	logResults := resp.getLeafResult.GetLeaves()
+	grpcResult := RespStatusCode{Code: getGprcCode(resp.status)}
 
 	return getResponse{
+		Status:       grpcResult,
 		FileRecieved: FileRecieved{File: header.Filename},
 		Leaves:       logResults,
 	}, nil
@@ -181,11 +185,11 @@ func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 	proofResultsJSON, err := json.Marshal(proofResults)
 
 	logging.Logger.Info("Return Proof Result: ", string(proofResultsJSON))
-	addResult := RespStatusCode{Code: getGprcCode(resp.status)}
-	logging.Logger.Info((addResult))
+	grpcResult := RespStatusCode{Code: getGprcCode(resp.status)}
+	logging.Logger.Info((grpcResult))
 
 	return getProofResponse{
-		Status:       addResult,
+		Status:       grpcResult,
 		FileRecieved: FileRecieved{File: header.Filename},
 		Proof:        proofResults,
 		Key:          api.pubkey.Der,
@@ -216,10 +220,10 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 
 	logging.Logger.Infof("Server PUT Response: %s", resp.status)
 
-	addResult := RespStatusCode{Code: getGprcCode(resp.status)}
+	grpcResult := RespStatusCode{Code: getGprcCode(resp.status)}
 
 	return addResponse{
-		Status: addResult,
+		Status: grpcResult,
 	}, nil
 }
 
