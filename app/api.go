@@ -43,14 +43,6 @@ type addResponse struct {
 	Status RespStatusCode
 }
 
-type RespStatusCode struct {
-	Code string `json:"status_code"`
-}
-
-type FileRecieved struct {
-	File string `json:"file_recieved"`
-}
-
 type latestResponse struct {
 	Status RespStatusCode
 	Proof  *trillian.GetLatestSignedLogRootResponse
@@ -64,7 +56,7 @@ type getResponse struct {
 }
 
 type getProofResponse struct {
-	Status       RespStatusCode
+	Status       string
 	FileRecieved FileRecieved
 	Proof        *trillian.GetInclusionProofByHashResponse
 	Key          []byte
@@ -159,6 +151,14 @@ func (api *API) getHandler(r *http.Request) (interface{}, error) {
 	}, nil
 }
 
+type RespStatusCode struct {
+	Code string `json:"file_recieved"`
+}
+
+type FileRecieved struct {
+	File string `json:"file_recieved"`
+}
+
 func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 	file, header, err := r.FormFile("fileupload")
 	if err != nil {
@@ -185,11 +185,9 @@ func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 	proofResultsJSON, err := json.Marshal(proofResults)
 
 	logging.Logger.Info("Return Proof Result: ", string(proofResultsJSON))
-	grpcResult := RespStatusCode{Code: getGprcCode(resp.status)}
-	logging.Logger.Info((grpcResult))
 
 	return getProofResponse{
-		Status:       grpcResult,
+		Status:       getGprcCode(resp.status),
 		FileRecieved: FileRecieved{File: header.Filename},
 		Proof:        proofResults,
 		Key:          api.pubkey.Der,
@@ -302,7 +300,6 @@ func (api *API) getleafHandler(r *http.Request) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	logging.Logger.Info(resp)
 
 	return getLeafResponse{
 		Leaf: resp,
