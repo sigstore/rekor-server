@@ -30,7 +30,6 @@ import (
 	"github.com/google/trillian/crypto/keyspb"
 	"github.com/projectrekor/rekor-server/logging"
 	"github.com/spf13/viper"
-	"google.golang.org/grpc/codes"
 )
 
 type API struct {
@@ -40,11 +39,11 @@ type API struct {
 	pubkey    *keyspb.PublicKey
 }
 
-type RespCode struct {
-	Code codes.Code
+type addResponse struct {
+	Status RespStatusCode
 }
 
-type RespCodeJson struct {
+type RespStatusCode struct {
 	Code string `json:"status_code"`
 }
 
@@ -52,8 +51,16 @@ type FileRecieved struct {
 	File string `json:"file_recieved"`
 }
 
-type ServerResponse struct {
-	Status string `json:"server_status"`
+type latestResponse struct {
+	Proof *trillian.GetLatestSignedLogRootResponse
+	Key   []byte
+}
+
+type getProofResponse struct {
+	Status       RespStatusCode
+	FileRecieved FileRecieved
+	Proof        *trillian.GetInclusionProofByHashResponse
+	Key          []byte
 }
 
 func NewAPI() (*API, error) {
@@ -115,9 +122,8 @@ func (api *API) ping(w http.ResponseWriter, r *http.Request) {
 }
 
 type getResponse struct {
-	ServerResponse ServerResponse
-	FileRecieved   FileRecieved
-	Leaves         []*trillian.LogLeaf
+	FileRecieved FileRecieved
+	Leaves       []*trillian.LogLeaf
 }
 
 func (api *API) getHandler(r *http.Request) (interface{}, error) {
@@ -144,17 +150,9 @@ func (api *API) getHandler(r *http.Request) (interface{}, error) {
 	logResults := resp.getLeafResult.GetLeaves()
 
 	return getResponse{
-		ServerResponse: ServerResponse{Status: resp.status},
-		FileRecieved:   FileRecieved{File: header.Filename},
-		Leaves:         logResults,
+		FileRecieved: FileRecieved{File: header.Filename},
+		Leaves:       logResults,
 	}, nil
-}
-
-type getProofResponse struct {
-	ServerResponse ServerResponse
-	FileRecieved   FileRecieved
-	Proof          *trillian.GetInclusionProofByHashResponse
-	Key            []byte
 }
 
 func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
@@ -183,19 +181,16 @@ func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 	proofResultsJSON, err := json.Marshal(proofResults)
 
 	logging.Logger.Info("Return Proof Result: ", string(proofResultsJSON))
+	addResult := RespStatusCode{Code: getGprcCode(resp.status)}
+	logging.Logger.Info((addResult))
 
 	return getProofResponse{
-		ServerResponse: ServerResponse{Status: resp.status},
-		FileRecieved:   FileRecieved{File: header.Filename},
-		Proof:          proofResults,
-		Key:            api.pubkey.Der,
+		Status:       addResult,
+		FileRecieved: FileRecieved{File: header.Filename},
+		Proof:        proofResults,
+		Key:          api.pubkey.Der,
 	}, nil
 
-}
-
-type addResponse struct {
-	RespCodeJson   RespCodeJson
-	ServerResponse ServerResponse
 }
 
 func (api *API) addHandler(r *http.Request) (interface{}, error) {
@@ -219,20 +214,12 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 		return nil, err
 	}
 
-	var codeRes RespCodeJson
-	switch resp.code {
-	case codes.OK:
-		codeRes = RespCodeJson{Code: "OK"}
-	case codes.AlreadyExists:
-		codeRes = RespCodeJson{Code: "Data Already Exists!"}
-	default:
-		codeRes = RespCodeJson{Code: "Server Error!"}
-	}
-
 	logging.Logger.Infof("Server PUT Response: %s", resp.status)
+
+	addResult := RespStatusCode{Code: getGprcCode(resp.status)}
+
 	return addResponse{
-		ServerResponse: ServerResponse{Status: resp.status},
-		RespCodeJson:   codeRes,
+		Status: addResult,
 	}, nil
 }
 
@@ -252,11 +239,6 @@ func wrap(h apiHandler) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, string(b))
 	}
-}
-
-type latestResponse struct {
-	Proof *trillian.GetLatestSignedLogRootResponse
-	Key   []byte
 }
 
 func (api *API) latestHandler(r *http.Request) (interface{}, error) {

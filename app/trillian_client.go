@@ -32,6 +32,7 @@ import (
 	"github.com/google/trillian/merkle/rfc6962"
 	"github.com/google/trillian/types"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type trillianclient struct {
@@ -42,8 +43,7 @@ type trillianclient struct {
 }
 
 type Response struct {
-	status         string
-	code           codes.Code
+	status         codes.Code
 	getLeafResult  *trillian.GetLeavesByHashResponse
 	getProofResult *trillian.GetInclusionProofByHashResponse
 }
@@ -93,18 +93,20 @@ func (s *trillianclient) getProof(byteValue []byte, tLogID int64) (*Response, er
 
 	v := merkle.NewLogVerifier(rfc6962.DefaultHasher)
 
-	for i, proof := range resp.Proof {
-		hashes := proof.GetHashes()
-		for j, hash := range hashes {
-			logging.Logger.Infof("Proof[%d],hash[%d] == %x\n", i, j, hash)
-		}
-		if err := v.VerifyInclusionProof(proof.LeafIndex, int64(root.TreeSize), hashes, root.RootHash, leafHash); err != nil {
-			return &Response{}, err
+	if resp != nil {
+		for i, proof := range resp.Proof {
+			hashes := proof.GetHashes()
+			for j, hash := range hashes {
+				logging.Logger.Infof("Proof[%d],hash[%d] == %x\n", i, j, hash)
+			}
+			if err := v.VerifyInclusionProof(proof.LeafIndex, int64(root.TreeSize), hashes, root.RootHash, leafHash); err != nil {
+				return &Response{}, err
+			}
 		}
 	}
 
 	return &Response{
-		status:         "OK",
+		status:         status.Code(err),
 		getProofResult: resp,
 	}, nil
 }
@@ -125,8 +127,7 @@ func (s *trillianclient) addLeaf(byteValue []byte, tLogID int64) (*Response, err
 	resultCode := codes.Code(resp.QueuedLeaf.GetStatus().GetCode())
 
 	return &Response{
-		status: "OK",
-		code:   resultCode,
+		status: resultCode,
 	}, nil
 }
 
@@ -145,7 +146,7 @@ func (s *trillianclient) getLeaf(byteValue []byte, tlog_id int64) (*Response, er
 	}
 
 	return &Response{
-		status:        "OK",
+		status:        status.Code(err),
 		getLeafResult: resp,
 	}, nil
 }
