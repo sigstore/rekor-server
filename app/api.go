@@ -43,16 +43,16 @@ type addResponse struct {
 	Status RespStatusCode
 }
 
-type latestResponse struct {
-	Status RespStatusCode
-	Proof  *trillian.GetLatestSignedLogRootResponse
-	Key    []byte
-}
-
 type getResponse struct {
 	Status       RespStatusCode
 	FileRecieved FileRecieved
 	Leaves       []*trillian.LogLeaf
+}
+
+type getLatestResponse struct {
+	Status RespStatusCode
+	Proof  *trillian.GetLatestSignedLogRootResponse
+	Key    []byte
 }
 
 type getProofResponse struct {
@@ -60,6 +60,19 @@ type getProofResponse struct {
 	FileRecieved FileRecieved
 	Proof        *trillian.GetInclusionProofByHashResponse
 	Key          []byte
+}
+
+type getLeafResponse struct {
+	Leaf *trillian.GetLeavesByIndexResponse
+	Key  []byte
+}
+
+type RespStatusCode struct {
+	Code string `json:"file_recieved"`
+}
+
+type FileRecieved struct {
+	File string `json:"file_recieved"`
 }
 
 func NewAPI() (*API, error) {
@@ -116,6 +129,24 @@ func NewAPI() (*API, error) {
 	}, nil
 }
 
+type apiHandler func(r *http.Request) (interface{}, error)
+
+func wrap(h apiHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		respObj, err := h(r)
+		if err != nil {
+			writeError(w, err)
+		}
+		b, err := json.Marshal(respObj)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, string(b))
+	}
+}
+
 func (api *API) ping(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "pong!")
 }
@@ -142,21 +173,12 @@ func (api *API) getHandler(r *http.Request) (interface{}, error) {
 	logging.Logger.Infof("TLOG Response: %s", resp.status)
 
 	logResults := resp.getLeafResult.GetLeaves()
-	grpcResult := RespStatusCode{Code: getGprcCode(resp.status)}
 
 	return getResponse{
-		Status:       grpcResult,
+		Status:       RespStatusCode{Code: getGprcCode(resp.status)},
 		FileRecieved: FileRecieved{File: header.Filename},
 		Leaves:       logResults,
 	}, nil
-}
-
-type RespStatusCode struct {
-	Code string `json:"file_recieved"`
-}
-
-type FileRecieved struct {
-	File string `json:"file_recieved"`
 }
 
 func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
@@ -218,32 +240,12 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 
 	logging.Logger.Infof("Server PUT Response: %s", resp.status)
 
-	grpcResult := RespStatusCode{Code: getGprcCode(resp.status)}
-
 	return addResponse{
-		Status: grpcResult,
+		Status: RespStatusCode{Code: getGprcCode(resp.status)},
 	}, nil
 }
 
-type apiHandler func(r *http.Request) (interface{}, error)
-
-func wrap(h apiHandler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		respObj, err := h(r)
-		if err != nil {
-			writeError(w, err)
-		}
-		b, err := json.Marshal(respObj)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, string(b))
-	}
-}
-
-func (api *API) latestHandler(r *http.Request) (interface{}, error) {
+func (api *API) getLatestHandler(r *http.Request) (interface{}, error) {
 	lastSizeInt := int64(0)
 	lastSize := r.URL.Query().Get("lastSize")
 	logging.Logger.Info("Last Tree Recieved: ", lastSize)
@@ -254,31 +256,22 @@ func (api *API) latestHandler(r *http.Request) (interface{}, error) {
 			return nil, err
 		}
 	}
-	resp, err := api.logClient.GetLatestSignedLogRoot(r.Context(), &trillian.GetLatestSignedLogRootRequest{
-		LogId:         api.tLogID,
-		FirstTreeSize: lastSizeInt,
-	})
-	if err != nil {
-		return nil, err
-	}
-	respJSON, err := json.Marshal(resp.SignedLogRoot)
-	if err != nil {
-		return nil, err
-	}
-	logging.Logger.Info("Return Latest Log Root:", string(respJSON))
 
-	return latestResponse{
-		Proof: resp,
-		Key:   api.pubkey.Der,
+	server := serverInstance(api.logClient, api.tLogID)
+
+	resp, err := server.getLatest(api.tLogID, lastSizeInt)
+	if err != nil {
+		return nil, err
+	}
+
+	return getLatestResponse{
+		Status: RespStatusCode{Code: getGprcCode(resp.status)},
+		Proof:  resp.getLatestResult,
+		Key:    api.pubkey.Der,
 	}, nil
 }
 
-type getLeafResponse struct {
-	Leaf *trillian.GetLeavesByIndexResponse
-	Key  []byte
-}
-
-func (api *API) getleafHandler(r *http.Request) (interface{}, error) {
+func (api *API) getLeafByIndexHandler(r *http.Request) (interface{}, error) {
 	leafSizeInt := int64(0)
 	leafIndex := r.URL.Query().Get("leafindex")
 
@@ -292,17 +285,22 @@ func (api *API) getleafHandler(r *http.Request) (interface{}, error) {
 		}
 	}
 
-	resp, err := api.logClient.GetLeavesByIndex(r.Context(), &trillian.GetLeavesByIndexRequest{
-		LogId:     api.tLogID,
-		LeafIndex: []int64{leafSizeInt},
-	})
+	server := serverInstance(api.logClient, api.tLogID)
 
+	resp, err := server.getLeafByIndex(api.tLogID, leafSizeInt)
 	if err != nil {
 		return nil, err
 	}
 
+	respJSON, err := json.Marshal(resp.getLeafByIndexResult)
+	if err != nil {
+		return nil, err
+	}
+
+	logging.Logger.Info("Return getLeafByIndex :", string(respJSON))
+
 	return getLeafResponse{
-		Leaf: resp,
+		Leaf: resp.getLeafByIndexResult,
 		Key:  api.pubkey.Der,
 	}, nil
 }
@@ -320,8 +318,8 @@ func New() (*chi.Mux, error) {
 	router.Post("/api/v1/add", wrap(api.addHandler))
 	router.Post("/api/v1/get", wrap(api.getHandler))
 	router.Post("/api/v1/getproof", wrap(api.getProofHandler))
-	router.Post("/api/v1/latest", wrap(api.latestHandler))
-	router.Get("/api/v1/getleaf", wrap(api.getleafHandler))
+	router.Post("/api/v1/latest", wrap(api.getLatestHandler))
+	router.Get("/api/v1/getleaf", wrap(api.getLeafByIndexHandler))
 	router.Get("/api/v1//ping", api.ping)
 	return router, nil
 }
