@@ -63,8 +63,9 @@ type getProofResponse struct {
 }
 
 type getLeafResponse struct {
-	Leaf *trillian.GetLeavesByIndexResponse
-	Key  []byte
+	Status RespStatusCode
+	Leaf   *trillian.GetLeavesByIndexResponse
+	Key    []byte
 }
 
 type RespStatusCode struct {
@@ -300,8 +301,9 @@ func (api *API) getLeafByIndexHandler(r *http.Request) (interface{}, error) {
 	logging.Logger.Info("Return getLeafByIndex :", string(respJSON))
 
 	return getLeafResponse{
-		Leaf: resp.getLeafByIndexResult,
-		Key:  api.pubkey.Der,
+		Status: RespStatusCode{Code: getGprcCode(resp.status)},
+		Leaf:   resp.getLeafByIndexResult,
+		Key:    api.pubkey.Der,
 	}, nil
 }
 
