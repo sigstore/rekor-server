@@ -30,7 +30,6 @@ import (
 	"github.com/google/trillian/crypto/keyspb"
 	"github.com/projectrekor/rekor-server/logging"
 	"github.com/spf13/viper"
-	"google.golang.org/grpc/codes"
 )
 
 type API struct {
@@ -40,20 +39,41 @@ type API struct {
 	pubkey    *keyspb.PublicKey
 }
 
-type RespCode struct {
-	Code codes.Code
+type addResponse struct {
+	Status RespStatusCode
 }
 
-type RespCodeJson struct {
-	Code string `json:"status_code"`
+type getResponse struct {
+	Status       RespStatusCode
+	FileRecieved FileRecieved
+	Leaves       []*trillian.LogLeaf
+}
+
+type getLatestResponse struct {
+	Status RespStatusCode
+	Proof  *trillian.GetLatestSignedLogRootResponse
+	Key    []byte
+}
+
+type getProofResponse struct {
+	Status       string
+	FileRecieved FileRecieved
+	Proof        *trillian.GetInclusionProofByHashResponse
+	Key          []byte
+}
+
+type getLeafResponse struct {
+	Status RespStatusCode
+	Leaf   *trillian.GetLeavesByIndexResponse
+	Key    []byte
+}
+
+type RespStatusCode struct {
+	Code string `json:"file_recieved"`
 }
 
 type FileRecieved struct {
 	File string `json:"file_recieved"`
-}
-
-type ServerResponse struct {
-	Status string `json:"server_status"`
 }
 
 func NewAPI() (*API, error) {
@@ -110,14 +130,26 @@ func NewAPI() (*API, error) {
 	}, nil
 }
 
-func (api *API) ping(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "pong!")
+type apiHandler func(r *http.Request) (interface{}, error)
+
+func wrap(h apiHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		respObj, err := h(r)
+		if err != nil {
+			writeError(w, err)
+		}
+		b, err := json.Marshal(respObj)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, string(b))
+	}
 }
 
-type getResponse struct {
-	ServerResponse ServerResponse
-	FileRecieved   FileRecieved
-	Leaves         []*trillian.LogLeaf
+func (api *API) ping(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "pong!")
 }
 
 func (api *API) getHandler(r *http.Request) (interface{}, error) {
@@ -144,17 +176,10 @@ func (api *API) getHandler(r *http.Request) (interface{}, error) {
 	logResults := resp.getLeafResult.GetLeaves()
 
 	return getResponse{
-		ServerResponse: ServerResponse{Status: resp.status},
-		FileRecieved:   FileRecieved{File: header.Filename},
-		Leaves:         logResults,
+		Status:       RespStatusCode{Code: getGprcCode(resp.status)},
+		FileRecieved: FileRecieved{File: header.Filename},
+		Leaves:       logResults,
 	}, nil
-}
-
-type getProofResponse struct {
-	ServerResponse ServerResponse
-	FileRecieved   FileRecieved
-	Proof          *trillian.GetInclusionProofByHashResponse
-	Key            []byte
 }
 
 func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
@@ -185,17 +210,12 @@ func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 	logging.Logger.Info("Return Proof Result: ", string(proofResultsJSON))
 
 	return getProofResponse{
-		ServerResponse: ServerResponse{Status: resp.status},
-		FileRecieved:   FileRecieved{File: header.Filename},
-		Proof:          proofResults,
-		Key:            api.pubkey.Der,
+		Status:       getGprcCode(resp.status),
+		FileRecieved: FileRecieved{File: header.Filename},
+		Proof:        proofResults,
+		Key:          api.pubkey.Der,
 	}, nil
 
-}
-
-type addResponse struct {
-	RespCodeJson   RespCodeJson
-	ServerResponse ServerResponse
 }
 
 func (api *API) addHandler(r *http.Request) (interface{}, error) {
@@ -219,47 +239,14 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 		return nil, err
 	}
 
-	var codeRes RespCodeJson
-	switch resp.code {
-	case codes.OK:
-		codeRes = RespCodeJson{Code: "OK"}
-	case codes.AlreadyExists:
-		codeRes = RespCodeJson{Code: "Data Already Exists!"}
-	default:
-		codeRes = RespCodeJson{Code: "Server Error!"}
-	}
-
 	logging.Logger.Infof("Server PUT Response: %s", resp.status)
+
 	return addResponse{
-		ServerResponse: ServerResponse{Status: resp.status},
-		RespCodeJson:   codeRes,
+		Status: RespStatusCode{Code: getGprcCode(resp.status)},
 	}, nil
 }
 
-type apiHandler func(r *http.Request) (interface{}, error)
-
-func wrap(h apiHandler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		respObj, err := h(r)
-		if err != nil {
-			writeError(w, err)
-		}
-		b, err := json.Marshal(respObj)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, string(b))
-	}
-}
-
-type latestResponse struct {
-	Proof *trillian.GetLatestSignedLogRootResponse
-	Key   []byte
-}
-
-func (api *API) latestHandler(r *http.Request) (interface{}, error) {
+func (api *API) getLatestHandler(r *http.Request) (interface{}, error) {
 	lastSizeInt := int64(0)
 	lastSize := r.URL.Query().Get("lastSize")
 	logging.Logger.Info("Last Tree Recieved: ", lastSize)
@@ -270,31 +257,22 @@ func (api *API) latestHandler(r *http.Request) (interface{}, error) {
 			return nil, err
 		}
 	}
-	resp, err := api.logClient.GetLatestSignedLogRoot(r.Context(), &trillian.GetLatestSignedLogRootRequest{
-		LogId:         api.tLogID,
-		FirstTreeSize: lastSizeInt,
-	})
-	if err != nil {
-		return nil, err
-	}
-	respJSON, err := json.Marshal(resp.SignedLogRoot)
-	if err != nil {
-		return nil, err
-	}
-	logging.Logger.Info("Return Latest Log Root:", string(respJSON))
 
-	return latestResponse{
-		Proof: resp,
-		Key:   api.pubkey.Der,
+	server := serverInstance(api.logClient, api.tLogID)
+
+	resp, err := server.getLatest(api.tLogID, lastSizeInt)
+	if err != nil {
+		return nil, err
+	}
+
+	return getLatestResponse{
+		Status: RespStatusCode{Code: getGprcCode(resp.status)},
+		Proof:  resp.getLatestResult,
+		Key:    api.pubkey.Der,
 	}, nil
 }
 
-type getLeafResponse struct {
-	Leaf *trillian.GetLeavesByIndexResponse
-	Key  []byte
-}
-
-func (api *API) getleafHandler(r *http.Request) (interface{}, error) {
+func (api *API) getLeafByIndexHandler(r *http.Request) (interface{}, error) {
 	leafSizeInt := int64(0)
 	leafIndex := r.URL.Query().Get("leafindex")
 
@@ -308,19 +286,24 @@ func (api *API) getleafHandler(r *http.Request) (interface{}, error) {
 		}
 	}
 
-	resp, err := api.logClient.GetLeavesByIndex(r.Context(), &trillian.GetLeavesByIndexRequest{
-		LogId:     api.tLogID,
-		LeafIndex: []int64{leafSizeInt},
-	})
+	server := serverInstance(api.logClient, api.tLogID)
 
+	resp, err := server.getLeafByIndex(api.tLogID, leafSizeInt)
 	if err != nil {
 		return nil, err
 	}
-	logging.Logger.Info(resp)
+
+	respJSON, err := json.Marshal(resp.getLeafByIndexResult)
+	if err != nil {
+		return nil, err
+	}
+
+	logging.Logger.Info("Return getLeafByIndex :", string(respJSON))
 
 	return getLeafResponse{
-		Leaf: resp,
-		Key:  api.pubkey.Der,
+		Status: RespStatusCode{Code: getGprcCode(resp.status)},
+		Leaf:   resp.getLeafByIndexResult,
+		Key:    api.pubkey.Der,
 	}, nil
 }
 
@@ -337,8 +320,8 @@ func New() (*chi.Mux, error) {
 	router.Post("/api/v1/add", wrap(api.addHandler))
 	router.Post("/api/v1/get", wrap(api.getHandler))
 	router.Post("/api/v1/getproof", wrap(api.getProofHandler))
-	router.Post("/api/v1/latest", wrap(api.latestHandler))
-	router.Get("/api/v1/getleaf", wrap(api.getleafHandler))
+	router.Post("/api/v1/latest", wrap(api.getLatestHandler))
+	router.Get("/api/v1/getleaf", wrap(api.getLeafByIndexHandler))
 	router.Get("/api/v1//ping", api.ping)
 	return router, nil
 }
