@@ -1,10 +1,13 @@
 FROM golang:alpine AS builder
 
-# Add source code
-ADD ./ /go/src/github.com/dhax/go-base/
+WORKDIR /go/src/github.com/projectrekor/rekor-server/
+ADD go.mod go.sum /go/src/github.com/projectrekor/rekor-server/
+RUN go mod download
 
-RUN cd /go/src/github.com/projectrekor/rekor-server && \
-    go build && \
+# Add source code
+ADD ./ /go/src/github.com/projectrekor/rekor-server/
+
+RUN go build && \
     mv ./rekor-server /usr/bin/rekor-server
 
 # Multi-Stage production build

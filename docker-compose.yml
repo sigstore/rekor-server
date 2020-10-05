@@ -53,4 +53,21 @@ services:
       - "8094:8091"
     depends_on:
       - mysql
-
+  rekor-server:
+    build:
+      context: .
+    command: [
+      "rekor-server",
+      "serve",
+      "--trillian_log_server.address=trillian-log-server",
+      "--trillian_log_server.port=8091",
+      "--trillian_map_server.address=trillian-map-server",
+      "--trillian_map_server.port=8090",
+      "--rekor_server.address=0.0.0.0",
+      ]
+    restart: always # keep the server running
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mysql
+      - trillian-log-server
