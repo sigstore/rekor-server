@@ -58,6 +58,11 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rekor-server.yaml)")
 
+	rootCmd.PersistentFlags().String("trillian_log_server", "http://localhost:8091", "Server address:port")
+	viper.BindPFlag("trillian_log_server", rootCmd.PersistentFlags().Lookup("trillian_log_server"))
+	rootCmd.PersistentFlags().String("trillian_map_server", "http://localhost:8093", "Server address:port")
+	viper.BindPFlag("trillian_map_server", rootCmd.PersistentFlags().Lookup("trillian_map_server"))
+
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
