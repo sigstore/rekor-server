@@ -17,8 +17,6 @@ RUN apk add --update ca-certificates
 
 # Retrieve the binary from the previous stage
 COPY --from=builder /usr/bin/rekor-server /usr/local/bin/rekor-server
-COPY rekor-server.yaml  /rekor/
-WORKDIR /rekor/
 
 # Set the binary as the entrypoint of the container
 CMD ["rekor-server", "serve"]

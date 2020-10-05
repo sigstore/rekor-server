@@ -56,6 +56,15 @@ services:
   rekor-server:
     build:
       context: .
+    command: [
+      "rekor-server",
+      "serve",
+      "--trillian_log_server.address=trillian-log-server",
+      "--trillian_log_server.port=8091",
+      "--trillian_map_server.address=trillian-map-server",
+      "--trillian_map_server.port=8090",
+      "--rekor_server.address=0.0.0.0",
+      ]
     restart: always # keep the server running
     ports:
       - "3000:3000"
