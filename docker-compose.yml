@@ -53,4 +53,12 @@ services:
       - "8094:8091"
     depends_on:
       - mysql
-
+  rekor-server:
+    build:
+      context: .
+    restart: always # keep the server running
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mysql
+      - trillian-log-server
