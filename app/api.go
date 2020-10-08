@@ -29,6 +29,7 @@ import (
 	"github.com/google/trillian"
 	"github.com/google/trillian/crypto/keyspb"
 	"github.com/projectrekor/rekor-server/logging"
+	"github.com/projectrekor/rekor-server/types"
 	"github.com/spf13/viper"
 )
 
@@ -230,6 +231,18 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 	byteLeaf, err := ioutil.ReadAll(file)
 	if err != nil {
 		return nil, err
+	}
+
+	// See if this is a valid RekorEntry
+	rekorEntry, err := types.ParseRekorEntry(byteLeaf)
+	if err == nil {
+		b, err := rekorEntry.MarshalledLeaf()
+		if err != nil {
+			return nil, err
+		}
+		byteLeaf = b
+	} else {
+		logging.Logger.Infof("Not a valid rekor entry: %s", err)
 	}
 
 	server := serverInstance(api.logClient, api.tLogID)
