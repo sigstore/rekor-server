@@ -32,9 +32,6 @@ func ParseRekorEntry(b []byte) (*RekorEntry, error) {
 	if err := json.Unmarshal(b, &e); err != nil {
 		return nil, err
 	}
-	if err := e.Load(); err != nil {
-		return nil, err
-	}
 	return &e, nil
 }
 
@@ -66,7 +63,11 @@ func (r *RekorEntry) Load() error {
 		// Validate the SHA
 		hasher := sha256.New()
 		if strings.HasSuffix(r.URL, ".gz") {
-			gz, _ := gzip.NewReader(bytes.NewReader(b))
+			logging.Logger.Info("gzipped content detected")
+			gz, err := gzip.NewReader(bytes.NewReader(b))
+			if err != nil {
+				return err
+			}
 			io.Copy(hasher, gz)
 		} else {
 			hasher.Write(b)
@@ -78,7 +79,10 @@ func (r *RekorEntry) Load() error {
 
 		dataReader = bytes.NewReader(b)
 		if strings.HasSuffix(r.URL, ".gz") {
-			dataReader, _ = gzip.NewReader(dataReader)
+			dataReader, err = gzip.NewReader(dataReader)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -86,6 +90,8 @@ func (r *RekorEntry) Load() error {
 	if strings.Contains(string(r.Signature), "-----BEGIN PGP") {
 		logging.Logger.Info("Armored signature detected")
 		verifyFn = openpgp.CheckArmoredDetachedSignature
+	} else {
+		logging.Logger.Info("Binary signature detected")
 	}
 
 	if _, err := verifyFn(publicKey, dataReader, bytes.NewReader(r.Signature)); err != nil {

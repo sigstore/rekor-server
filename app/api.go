@@ -31,6 +31,7 @@ import (
 	"github.com/projectrekor/rekor-server/logging"
 	"github.com/projectrekor/rekor-server/types"
 	"github.com/spf13/viper"
+	"google.golang.org/grpc/codes"
 )
 
 type API struct {
@@ -235,18 +236,26 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 
 	// See if this is a valid RekorEntry
 	rekorEntry, err := types.ParseRekorEntry(byteLeaf)
-	if err == nil {
-		b, err := rekorEntry.MarshalledLeaf()
-		if err != nil {
-			return nil, err
-		}
-		byteLeaf = b
-	} else {
-		logging.Logger.Infof("Not a valid rekor entry: %s", err)
+	if err != nil {
+		logging.Logger.Errorf("Not a valid rekor entry: %s", err)
+		return nil, err
+	}
+	// Check to see if the entry already exists
+	server := serverInstance(api.logClient, api.tLogID)
+	b, err := rekorEntry.MarshalledLeaf()
+	if err != nil {
+		return nil, err
+	}
+	if resp, err := server.getLeaf(b, api.tLogID); err != nil && len(resp.getLeafResult.Leaves) != 0 {
+		return addResponse{
+			Status: RespStatusCode{Code: getGprcCode(codes.AlreadyExists)},
+		}, nil
 	}
 
-	server := serverInstance(api.logClient, api.tLogID)
-
+	// Now load/validate it before entry. This can be expensive, so we first check if the data already exists.
+	if err := rekorEntry.Load(); err != nil {
+		return nil, err
+	}
 	resp, err := server.addLeaf(byteLeaf, api.tLogID)
 	if err != nil {
 		return nil, err
