@@ -243,6 +243,7 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 		byteLeaf = b
 	} else {
 		logging.Logger.Infof("Not a valid rekor entry: %s", err)
+		return nil, err
 	}
 
 	server := serverInstance(api.logClient, api.tLogID)
