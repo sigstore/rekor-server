@@ -77,13 +77,16 @@ func (r *RekorEntry) Load() error {
 			return fmt.Errorf("SHA mismatch: %s", r.SHA)
 		}
 
-		dataReader = bytes.NewReader(b)
 		if strings.HasSuffix(r.URL, ".gz") {
 			dataReader, err = gzip.NewReader(dataReader)
 			if err != nil {
 				return err
 			}
+		} else {
+			dataReader = bytes.NewReader(b)
 		}
+	} else {
+		dataReader = bytes.NewReader(r.Data)
 	}
 
 	verifyFn := openpgp.CheckDetachedSignature
