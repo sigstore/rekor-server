@@ -17,10 +17,12 @@ limitations under the License.
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -163,13 +165,16 @@ func (api *API) getHandler(r *http.Request) (interface{}, error) {
 
 	logging.Logger.Info("Received file: ", header.Filename)
 
-	byteLeaf, err := ioutil.ReadAll(file)
-	if err != nil {
+	var byteLeaf bytes.Buffer
+	tee := io.TeeReader(file, &byteLeaf)
+
+	if _, err := types.ParseRekorLeaf(tee); err != nil {
+		logging.Logger.Errorf("Not a valid rekor entry: %s", err)
 		return nil, err
 	}
 
 	server := serverInstance(api.logClient, api.tLogID)
-	resp, err := server.getLeaf(byteLeaf, api.tLogID)
+	resp, err := server.getLeaf(byteLeaf.Bytes(), api.tLogID)
 	if err != nil {
 		return nil, err
 	}
@@ -193,13 +198,20 @@ func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 
 	logging.Logger.Info("Received file : ", header.Filename)
 
-	byteLeaf, err := ioutil.ReadAll(file)
-	if err != nil {
+	var byteLeaf bytes.Buffer
+	tee := io.TeeReader(file, &byteLeaf)
+
+	leaf, err := types.ParseRekorLeaf(tee)
+	if err != nil || leaf.SHA == "" {
+		if err == nil {
+			err = errors.New("missing SHA sum")
+		}
+		logging.Logger.Errorf("Not a valid rekor entry: %s", err)
 		return nil, err
 	}
 
 	server := serverInstance(api.logClient, api.tLogID)
-	resp, err := server.getProof(byteLeaf, api.tLogID)
+	resp, err := server.getProof(byteLeaf.Bytes(), api.tLogID)
 	if err != nil {
 		return nil, err
 	}
@@ -229,34 +241,47 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 
 	logging.Logger.Info("Received file : ", header.Filename)
 
-	byteLeaf, err := ioutil.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
+	var byteEntry bytes.Buffer
+	tee := io.TeeReader(file, &byteEntry)
 
-	// See if this is a valid RekorEntry
-	rekorEntry, err := types.ParseRekorEntry(byteLeaf)
+	// See if this is a valid RekorLeaf
+	rekorLeaf, err := types.ParseRekorLeaf(tee)
 	if err != nil {
 		logging.Logger.Errorf("Not a valid rekor entry: %s", err)
 		return nil, err
 	}
-	// Check to see if the entry already exists
+
+	// Check to see if the entry already exists, only if we have a full leaf
 	server := serverInstance(api.logClient, api.tLogID)
-	b, err := rekorEntry.MarshalledLeaf()
+	if rekorLeaf.SHA != "" {
+		byteLeaf, err := json.Marshal(rekorLeaf)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp, err := server.getLeaf(byteLeaf, api.tLogID); err != nil && len(resp.getLeafResult.Leaves) != 0 {
+			return addResponse{
+				Status: RespStatusCode{Code: getGprcCode(codes.AlreadyExists)},
+			}, nil
+		}
+	}
+
+	rekorEntry, err := types.ParseRekorEntry(&byteEntry, *rekorLeaf)
 	if err != nil {
 		return nil, err
 	}
-	if resp, err := server.getLeaf(b, api.tLogID); err != nil && len(resp.getLeafResult.Leaves) != 0 {
-		return addResponse{
-			Status: RespStatusCode{Code: getGprcCode(codes.AlreadyExists)},
-		}, nil
-	}
 
-	// Now load/validate it before entry. This can be expensive, so we first check if the data already exists.
-	if err := rekorEntry.Load(); err != nil {
+	// Now load/validate it before adding. This can be expensive, so we first check if the data already exists.
+	if err := rekorEntry.Load(r.Context()); err != nil {
 		return nil, err
 	}
-	resp, err := server.addLeaf(byteLeaf, api.tLogID)
+
+	leafToAdd, err := json.Marshal(rekorEntry.RekorLeaf)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := server.addLeaf(leafToAdd, api.tLogID)
 	if err != nil {
 		return nil, err
 	}
