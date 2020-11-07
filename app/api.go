@@ -165,16 +165,19 @@ func (api *API) getHandler(r *http.Request) (interface{}, error) {
 
 	logging.Logger.Info("Received file: ", header.Filename)
 
-	var byteLeaf bytes.Buffer
-	tee := io.TeeReader(file, &byteLeaf)
-
-	if _, err := types.ParseRekorLeaf(tee); err != nil {
+	leaf, err := types.ParseRekorLeaf(file)
+	if err != nil {
 		logging.Logger.Errorf("Not a valid rekor entry: %s", err)
 		return nil, err
 	}
 
+	byteLeaf, err := json.Marshal(leaf)
+	if err != nil {
+		return nil, err
+	}
+
 	server := serverInstance(api.logClient, api.tLogID)
-	resp, err := server.getLeaf(byteLeaf.Bytes(), api.tLogID)
+	resp, err := server.getLeaf(byteLeaf, api.tLogID)
 	if err != nil {
 		return nil, err
 	}
@@ -198,10 +201,7 @@ func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 
 	logging.Logger.Info("Received file : ", header.Filename)
 
-	var byteLeaf bytes.Buffer
-	tee := io.TeeReader(file, &byteLeaf)
-
-	leaf, err := types.ParseRekorLeaf(tee)
+	leaf, err := types.ParseRekorLeaf(file)
 	if err != nil || leaf.SHA == "" {
 		if err == nil {
 			err = errors.New("missing SHA sum")
@@ -210,8 +210,13 @@ func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 		return nil, err
 	}
 
+	byteLeaf, err := json.Marshal(leaf)
+	if err != nil {
+		return nil, err
+	}
+
 	server := serverInstance(api.logClient, api.tLogID)
-	resp, err := server.getProof(byteLeaf.Bytes(), api.tLogID)
+	resp, err := server.getProof(byteLeaf, api.tLogID)
 	if err != nil {
 		return nil, err
 	}
