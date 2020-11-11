@@ -58,20 +58,21 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rekor-server.yaml)")
 
-	rootCmd.PersistentFlags().String("trillian_log_server.address", "127.0.0.1", "Server address")
-	viper.BindPFlag("trillian_log_server.address", rootCmd.PersistentFlags().Lookup("trillian_log_server.address"))
-	rootCmd.PersistentFlags().String("trillian_log_server.port", "8091", "Server port")
-	viper.BindPFlag("trillian_log_server.port", rootCmd.PersistentFlags().Lookup("trillian_log_server.port"))
+	flags := [][3]string{
+		{"trillian_log_server.address", "127.0.0.1", "Server address"},
+		{"trillian_log_server.port", "8091", "Server port"},
+		{"trillian_map_server.address", "127.0.0.1", "Server address"},
+		{"trillian_map_server.port", "8093", "Server port"},
+		{"rekor_server.address", "127.0.0.1", "Server address"},
+		{"rekor_server.port", "3000", "Server port"},
+	}
 
-	rootCmd.PersistentFlags().String("trillian_map_server.address", "127.0.0.1", "Server address")
-	viper.BindPFlag("trillian_map_server.address", rootCmd.PersistentFlags().Lookup("trillian_map_server.address"))
-	rootCmd.PersistentFlags().String("trillian_map_server.port", "8093", "Server port")
-	viper.BindPFlag("trillian_map_server.port", rootCmd.PersistentFlags().Lookup("trillian_map_server.port"))
-
-	rootCmd.PersistentFlags().String("rekor_server.address", "127.0.0.1", "Server address")
-	viper.BindPFlag("rekor_server.address", rootCmd.PersistentFlags().Lookup("rekor_server.address"))
-	rootCmd.PersistentFlags().String("rekor_server.port", "3000", "Server port")
-	viper.BindPFlag("rekor_server.port", rootCmd.PersistentFlags().Lookup("rekor_server.port"))
+	for _, flag := range flags {
+		rootCmd.PersistentFlags().String(flag[0], flag[1], flag[2])
+		if err := viper.BindPFlag(flag[0], rootCmd.PersistentFlags().Lookup(flag[0])); err != nil {
+			logging.Logger.Fatal(err)
+		}
+	}
 
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
