@@ -138,6 +138,10 @@ type apiHandler func(r *http.Request) (interface{}, error)
 
 func wrap(h apiHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		r = r.WithContext(logging.WithRequestID(ctx, middleware.GetReqID(ctx)))
+		defer logging.RequestIDLogger(r).Sync()
+
 		respObj, err := h(r)
 		if err != nil {
 			writeError(w, err)
@@ -163,11 +167,11 @@ func (api *API) getHandler(r *http.Request) (interface{}, error) {
 	}
 	defer file.Close()
 
-	logging.Logger.Info("Received file: ", header.Filename)
+	logging.RequestIDLogger(r).Info("Received file: ", header.Filename)
 
 	leaf, err := types.ParseRekorLeaf(file)
 	if err != nil {
-		logging.Logger.Errorf("Not a valid rekor entry: %s", err)
+		logging.RequestIDLogger(r).Errorf("Not a valid rekor entry: %s", err)
 		return nil, err
 	}
 
@@ -181,7 +185,7 @@ func (api *API) getHandler(r *http.Request) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	logging.Logger.Infof("TLOG Response: %s", resp.status)
+	logging.RequestIDLogger(r).Infof("TLOG Response: %s", resp.status)
 
 	logResults := resp.getLeafResult.GetLeaves()
 
@@ -199,14 +203,14 @@ func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 	}
 	defer file.Close()
 
-	logging.Logger.Info("Received file : ", header.Filename)
+	logging.RequestIDLogger(r).Info("Received file : ", header.Filename)
 
 	leaf, err := types.ParseRekorLeaf(file)
 	if err != nil || leaf.SHA == "" {
 		if err == nil {
 			err = errors.New("missing SHA sum")
 		}
-		logging.Logger.Errorf("Not a valid rekor entry: %s", err)
+		logging.RequestIDLogger(r).Errorf("Not a valid rekor entry: %s", err)
 		return nil, err
 	}
 
@@ -221,12 +225,12 @@ func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 		return nil, err
 	}
 
-	logging.Logger.Infof("TLOG PUT Response: %s", resp.status)
+	logging.RequestIDLogger(r).Infof("TLOG PUT Response: %s", resp.status)
 
 	proofResults := resp.getProofResult
 	proofResultsJSON, err := json.Marshal(proofResults)
 
-	logging.Logger.Info("Return Proof Result: ", string(proofResultsJSON))
+	logging.RequestIDLogger(r).Info("Return Proof Result: ", string(proofResultsJSON))
 
 	return getProofResponse{
 		Status:       getGprcCode(resp.status),
@@ -244,7 +248,7 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 	}
 	defer file.Close()
 
-	logging.Logger.Info("Received file : ", header.Filename)
+	logging.RequestIDLogger(r).Info("Received file : ", header.Filename)
 
 	var byteEntry bytes.Buffer
 	tee := io.TeeReader(file, &byteEntry)
@@ -252,7 +256,7 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 	// See if this is a valid RekorLeaf
 	rekorLeaf, err := types.ParseRekorLeaf(tee)
 	if err != nil {
-		logging.Logger.Errorf("Not a valid rekor entry: %s", err)
+		logging.RequestIDLogger(r).Errorf("Not a valid rekor entry: %s", err)
 		return nil, err
 	}
 
@@ -291,7 +295,7 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 		return nil, err
 	}
 
-	logging.Logger.Infof("Server PUT Response: %s", resp.status)
+	logging.RequestIDLogger(r).Infof("Server PUT Response: %s", resp.status)
 
 	return addResponse{
 		Status: RespStatusCode{Code: getGprcCode(resp.status)},
@@ -301,7 +305,7 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 func (api *API) getLatestHandler(r *http.Request) (interface{}, error) {
 	lastSizeInt := int64(0)
 	lastSize := r.URL.Query().Get("lastSize")
-	logging.Logger.Info("Last Tree Recieved: ", lastSize)
+	logging.RequestIDLogger(r).Info("Last Tree Recieved: ", lastSize)
 	if lastSize != "" {
 		var err error
 		lastSizeInt, err = strconv.ParseInt(lastSize, 10, 64)
@@ -350,7 +354,7 @@ func (api *API) getLeafByIndexHandler(r *http.Request) (interface{}, error) {
 		return nil, err
 	}
 
-	logging.Logger.Info("Return getLeafByIndex :", string(respJSON))
+	logging.RequestIDLogger(r).Info("Return getLeafByIndex :", string(respJSON))
 
 	return getLeafResponse{
 		Status: RespStatusCode{Code: getGprcCode(resp.status)},
