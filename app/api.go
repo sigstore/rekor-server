@@ -83,7 +83,7 @@ type FileRecieved struct {
 func NewAPI() (*API, error) {
 	logRpcServer := fmt.Sprintf("%s:%d",
 		viper.GetString("trillian_log_server.address"),
-		viper.GetInt("trillian_log_server.port"))
+		viper.GetUint("trillian_log_server.port"))
 	ctx := context.Background()
 	tConn, err := dial(ctx, logRpcServer)
 	if err != nil {
@@ -103,7 +103,7 @@ func NewAPI() (*API, error) {
 
 	mapRpcServer := fmt.Sprintf("%s:%d",
 		viper.GetString("trillian_map_server.address"),
-		viper.GetInt("trillian_map_server.port"))
+		viper.GetUint("trillian_map_server.port"))
 	mConn, err := dial(ctx, mapRpcServer)
 	if err != nil {
 		return nil, err

@@ -58,20 +58,15 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rekor-server.yaml)")
 
-	flags := [][3]string{
-		{"trillian_log_server.address", "127.0.0.1", "Server address"},
-		{"trillian_log_server.port", "8091", "Server port"},
-		{"trillian_map_server.address", "127.0.0.1", "Server address"},
-		{"trillian_map_server.port", "8093", "Server port"},
-		{"rekor_server.address", "127.0.0.1", "Server address"},
-		{"rekor_server.port", "3000", "Server port"},
-	}
+	rootCmd.PersistentFlags().String("trillian_log_server.address", "127.0.0.1", "Trillian log server address")
+	rootCmd.PersistentFlags().Uint16("trillian_log_server.port", 8091, "Trillian log server port")
+	rootCmd.PersistentFlags().String("trillian_map_server.address", "127.0.0.1", "Trillian map server address")
+	rootCmd.PersistentFlags().Uint16("trillian_map_server.port", 8093, "Trillian map server port")
+	rootCmd.PersistentFlags().String("rekor_server.address", "127.0.0.1", "Address to bind to")
+	rootCmd.PersistentFlags().Uint16("rekor_server.port", 3000, "Port to bind to")
 
-	for _, flag := range flags {
-		rootCmd.PersistentFlags().String(flag[0], flag[1], flag[2])
-		if err := viper.BindPFlag(flag[0], rootCmd.PersistentFlags().Lookup(flag[0])); err != nil {
-			logging.Logger.Fatal(err)
-		}
+	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
+		logging.Logger.Fatal(err)
 	}
 
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")

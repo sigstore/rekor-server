@@ -41,7 +41,7 @@ func NewServer() (*Server, error) {
 
 	addr := fmt.Sprintf("%s:%d",
 		viper.GetString("rekor_server.address"),
-		viper.GetInt("rekor_server.port"))
+		viper.GetUint("rekor_server.port"))
 
 	srv := http.Server{
 		Addr:    addr,
