@@ -58,20 +58,16 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rekor-server.yaml)")
 
-	rootCmd.PersistentFlags().String("trillian_log_server.address", "127.0.0.1", "Server address")
-	viper.BindPFlag("trillian_log_server.address", rootCmd.PersistentFlags().Lookup("trillian_log_server.address"))
-	rootCmd.PersistentFlags().String("trillian_log_server.port", "8091", "Server port")
-	viper.BindPFlag("trillian_log_server.port", rootCmd.PersistentFlags().Lookup("trillian_log_server.port"))
+	rootCmd.PersistentFlags().String("trillian_log_server.address", "127.0.0.1", "Trillian log server address")
+	rootCmd.PersistentFlags().Uint16("trillian_log_server.port", 8091, "Trillian log server port")
+	rootCmd.PersistentFlags().String("trillian_map_server.address", "127.0.0.1", "Trillian map server address")
+	rootCmd.PersistentFlags().Uint16("trillian_map_server.port", 8093, "Trillian map server port")
+	rootCmd.PersistentFlags().String("rekor_server.address", "127.0.0.1", "Address to bind to")
+	rootCmd.PersistentFlags().Uint16("rekor_server.port", 3000, "Port to bind to")
 
-	rootCmd.PersistentFlags().String("trillian_map_server.address", "127.0.0.1", "Server address")
-	viper.BindPFlag("trillian_map_server.address", rootCmd.PersistentFlags().Lookup("trillian_map_server.address"))
-	rootCmd.PersistentFlags().String("trillian_map_server.port", "8093", "Server port")
-	viper.BindPFlag("trillian_map_server.port", rootCmd.PersistentFlags().Lookup("trillian_map_server.port"))
-
-	rootCmd.PersistentFlags().String("rekor_server.address", "127.0.0.1", "Server address")
-	viper.BindPFlag("rekor_server.address", rootCmd.PersistentFlags().Lookup("rekor_server.address"))
-	rootCmd.PersistentFlags().String("rekor_server.port", "3000", "Server port")
-	viper.BindPFlag("rekor_server.port", rootCmd.PersistentFlags().Lookup("rekor_server.port"))
+	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
+		logging.Logger.Fatal(err)
+	}
 
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
