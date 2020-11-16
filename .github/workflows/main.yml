@@ -30,3 +30,8 @@ jobs:
       # Test It
       - name: Test
         run: go test -v .
+      # Look for security issues
+      - name: Gosec
+        uses: securego/gosec@master
+        with:
+          args: ./...
