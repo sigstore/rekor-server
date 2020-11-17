@@ -36,10 +36,8 @@ import (
 )
 
 type trillianclient struct {
-	lc     *client.LogClient
 	client trillian.TrillianLogClient
 	logID  int64
-	ctx    context.Context
 }
 
 type Response struct {
