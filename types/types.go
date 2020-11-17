@@ -72,8 +72,8 @@ func ParseRekorLeaf(r io.Reader) (*RekorLeaf, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Invalid signature provided")
 	}
-	if _, ok := sigPkt.(*packet.Signature); ok != true {
-		if _, ok := sigPkt.(*packet.SignatureV3); ok != true {
+	if _, ok := sigPkt.(*packet.Signature); !ok {
+		if _, ok := sigPkt.(*packet.SignatureV3); !ok {
 			return nil, fmt.Errorf("Invalid signature provided")
 		}
 	}
@@ -195,7 +195,7 @@ func (r *RekorEntry) Load(ctx context.Context) error {
 		defer pgpR.Close()
 
 		verifyFn := openpgp.CheckDetachedSignature
-		if r.ArmorSig == true {
+		if r.ArmorSig {
 			verifyFn = openpgp.CheckArmoredDetachedSignature
 		}
 

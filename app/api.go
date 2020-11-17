@@ -112,11 +112,11 @@ func NewAPI() (*API, error) {
 	mapClient := trillian.NewTrillianMapClient(mConn)
 	tMapID := viper.GetInt64("trillian_map_server.tmap_id")
 	if tMapID == 0 {
-		t, err := createAndInitMap(ctx, mapAdminClient, mapClient)
+		_, err := createAndInitMap(ctx, mapAdminClient, mapClient)
 		if err != nil {
 			return nil, err
 		}
-		tMapID = t.TreeId
+		//tMapID = t.TreeId
 	}
 
 	t, err := logAdminClient.GetTree(ctx, &trillian.GetTreeRequest{
@@ -140,7 +140,11 @@ func wrap(h apiHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		r = r.WithContext(logging.WithRequestID(ctx, middleware.GetReqID(ctx)))
-		defer logging.RequestIDLogger(r).Sync()
+		defer func() {
+			if err := logging.RequestIDLogger(r).Sync(); err != nil {
+				logging.RequestIDLogger(r).Warnf("Call to sync request logger failed at end of transaction: %v", err)
+			}
+		}()
 
 		respObj, err := h(r)
 		if err != nil {
@@ -229,6 +233,9 @@ func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 
 	proofResults := resp.getProofResult
 	proofResultsJSON, err := json.Marshal(proofResults)
+	if err != nil {
+		return nil, err
+	}
 
 	logging.RequestIDLogger(r).Info("Return Proof Result: ", string(proofResultsJSON))
 
