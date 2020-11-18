@@ -121,9 +121,7 @@ func wrap(h apiHandler) http.HandlerFunc {
 		ctx := r.Context()
 		r = r.WithContext(logging.WithRequestID(ctx, middleware.GetReqID(ctx)))
 		defer func() {
-			if err := logging.RequestIDLogger(r).Sync(); err != nil {
-				logging.RequestIDLogger(r).Warnf("Call to sync request logger failed at end of transaction: %v", err)
-			}
+			_ = logging.RequestIDLogger(r).Sync()
 		}()
 
 		respObj, err := h(r)
