@@ -24,7 +24,6 @@ jobs:
       # Lint it
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v2
-        continue-on-error: true
         with:
           version: v1.32
       # Test It
