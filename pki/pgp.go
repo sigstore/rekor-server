@@ -58,7 +58,7 @@ func NewPGPSignature(r io.Reader) (*PGPSignature, error) {
 	} else {
 		s.isArmored = false
 		if _, err := sigByteReader.Seek(0, io.SeekStart); err != nil {
-			return nil, fmt.Errorf("Unable to read PGP signature: %w", err)
+			return nil, fmt.Errorf("Unable to read binary PGP signature: %w", err)
 		}
 		sigReader = sigByteReader
 	}
@@ -71,7 +71,7 @@ func NewPGPSignature(r io.Reader) (*PGPSignature, error) {
 
 	if _, ok := sigPkt.(*packet.Signature); !ok {
 		if _, ok := sigPkt.(*packet.SignatureV3); !ok {
-			return nil, fmt.Errorf("Invalid PGP signature")
+			return nil, fmt.Errorf("Valid PGP signature was not detected")
 		}
 	}
 
@@ -83,7 +83,7 @@ func NewPGPSignature(r io.Reader) (*PGPSignature, error) {
 func FetchPGPSignature(ctx context.Context, url string) (*PGPSignature, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("Error fetching PGP signature: %w", err)
+		return nil, fmt.Errorf("Error initializing fetch for PGP signature: %w", err)
 	}
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -112,7 +112,7 @@ func (s PGPSignature) CanonicalValue() ([]byte, error) {
 	var canonicalBuffer bytes.Buffer
 	ew, err := armor.Encode(&canonicalBuffer, openpgp.SignatureType, nil)
 	if err != nil {
-		return nil, fmt.Errorf("Error generating canonical value of PGP signature: %w", err)
+		return nil, fmt.Errorf("Error encoding canonical value of PGP signature: %w", err)
 	}
 
 	if _, err := io.Copy(ew, bytes.NewReader(s.signature)); err != nil {
@@ -153,14 +153,6 @@ type PGPPublicKey struct {
 	key openpgp.EntityList
 }
 
-// Key returns the EntityList representing the contents of the public key
-func (k PGPPublicKey) Key() (openpgp.EntityList, error) {
-	if k.key == nil {
-		return nil, fmt.Errorf("PGP public key has not been initialized")
-	}
-	return k.key, nil
-}
-
 // NewPGPPublicKey implements the pki.PublicKey interface
 func NewPGPPublicKey(r io.Reader) (*PGPPublicKey, error) {
 	var k PGPPublicKey
@@ -189,11 +181,11 @@ func NewPGPPublicKey(r io.Reader) (*PGPPublicKey, error) {
 				keyBlock, err := armor.Decode(&inputBuffer)
 				if err == nil {
 					if keyBlock.Type != openpgp.PublicKeyType && keyBlock.Type != openpgp.PrivateKeyType {
-						return nil, fmt.Errorf("Invalid PGP public key provided")
+						return nil, fmt.Errorf("Invalid PGP type detected")
 					}
 					keys, err := openpgp.ReadKeyRing(keyBlock.Body)
 					if err != nil {
-						return nil, fmt.Errorf("Invalid PGP public key provided2: %w", err)
+						return nil, fmt.Errorf("Error reading PGP public key: %w", err)
 					}
 					if k.key == nil {
 						k.key = keys
@@ -202,7 +194,7 @@ func NewPGPPublicKey(r io.Reader) (*PGPPublicKey, error) {
 					}
 					inputBuffer.Reset()
 				} else {
-					return nil, fmt.Errorf("Invalid PGP public key provided1: %w", err)
+					return nil, fmt.Errorf("Invalid PGP public key provided: %w", err)
 				}
 			}
 		}
@@ -210,7 +202,7 @@ func NewPGPPublicKey(r io.Reader) (*PGPPublicKey, error) {
 		// process as binary
 		k.key, err = openpgp.ReadKeyRing(bufferedReader)
 		if err != nil {
-			return nil, fmt.Errorf("Invalid PGP public key provided: %w", err)
+			return nil, fmt.Errorf("Error reading binary PGP public key: %w", err)
 		}
 	}
 
