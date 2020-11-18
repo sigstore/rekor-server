@@ -1,3 +1,19 @@
+/*
+Copyright © 2020 Bob Callaway <bcallawa@redhat.com>
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package types
 
 import (
@@ -13,10 +29,7 @@ import (
 	"io"
 	"net/http"
 
-	"golang.org/x/crypto/openpgp/armor"
-	"golang.org/x/crypto/openpgp/packet"
-
-	"golang.org/x/crypto/openpgp"
+	"github.com/projectrekor/rekor-server/pki"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -32,8 +45,29 @@ type RekorLeaf struct {
 	SHA       string
 	Signature []byte
 	PublicKey []byte
-	PubKeyEnt openpgp.EntityList `json:"-"`
-	ArmorSig  bool               `json:"-"`
+	keyObject pki.PublicKey
+	sigObject pki.Signature
+}
+
+// MarshalJSON Ensures that the canonicalized versions of public keys & signatures are stored in tLOG
+func (r *RekorLeaf) MarshalJSON() ([]byte, error) {
+	//create an identical type but due to reflection will not recursively enter this marshaller
+	type canonicalLeaf struct {
+		RekorLeaf
+	}
+	var cLeaf canonicalLeaf
+	cLeaf.SHA = r.SHA
+
+	var err error
+	cLeaf.Signature, err = r.sigObject.CanonicalValue()
+	if err != nil {
+		return nil, err
+	}
+	cLeaf.PublicKey, err = r.keyObject.CanonicalValue()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(cLeaf)
 }
 
 func ParseRekorLeaf(r io.Reader) (*RekorLeaf, error) {
@@ -50,67 +84,32 @@ func ParseRekorLeaf(r io.Reader) (*RekorLeaf, error) {
 		}
 	}
 
+	//TODO: make this create the appropriate signature & key objects based on
+	//      the content in the proposed leaf rather than being hardcoded to PGP
+	var err error
 	// check if this is an actual signature
-	var sigReader io.Reader
-	sigByteReader := bytes.NewReader(l.Signature)
-	sigBlock, err := armor.Decode(sigByteReader)
-	if err == nil {
-		l.ArmorSig = true
-		if sigBlock.Type != openpgp.SignatureType {
-			return nil, fmt.Errorf("Invalid signature provided")
-		}
-		sigReader = sigBlock.Body
-	} else {
-		l.ArmorSig = false
-		if _, err := sigByteReader.Seek(0, io.SeekStart); err != nil {
-			return nil, err
-		}
-		sigReader = sigByteReader
-	}
-	sigPktReader := packet.NewReader(sigReader)
-	sigPkt, err := sigPktReader.Next()
+	l.sigObject, err = pki.NewPGPSignature(bytes.NewReader(l.Signature))
 	if err != nil {
-		return nil, fmt.Errorf("Invalid signature provided")
-	}
-	if _, ok := sigPkt.(*packet.Signature); ok != true {
-		if _, ok := sigPkt.(*packet.SignatureV3); ok != true {
-			return nil, fmt.Errorf("Invalid signature provided")
-		}
+		return nil, err
 	}
 
 	// check if this is an actual public key
-	var keyReader io.Reader
-	keyByteReader := bytes.NewReader(l.PublicKey)
-	keyBlock, err := armor.Decode(keyByteReader)
-	if err == nil {
-		if keyBlock.Type != openpgp.PublicKeyType {
-			return nil, fmt.Errorf("Invalid public key provided")
-		}
-		keyReader = keyBlock.Body
-	} else {
-		if _, err := keyByteReader.Seek(0, io.SeekStart); err != nil {
-			return nil, err
-		}
-		keyReader = keyByteReader
-	}
-
-	pubKey, err := openpgp.ReadKeyRing(keyReader)
+	l.keyObject, err = pki.NewPGPPublicKey(bytes.NewReader(l.PublicKey))
 	if err != nil {
-		return nil, fmt.Errorf("Invalid public key provided")
+		return nil, err
 	}
-	l.PubKeyEnt = pubKey
 
 	return &l, nil
 }
 
-func ParseRekorEntry(r io.Reader, leaf RekorLeaf) (*RekorEntry, error) {
+func ParseRekorEntry(r io.Reader, leaf *RekorLeaf) (*RekorEntry, error) {
 	var e RekorEntry
 	dec := json.NewDecoder(r)
 	if err := dec.Decode(&e); err != nil && err != io.EOF {
 		return nil, err
 	}
 	//decode above should not have included the previously parsed & validated leaf, so copy it in
-	e.RekorLeaf = leaf
+	e.RekorLeaf = *leaf
 
 	if e.Data == nil && e.URL == "" {
 		return nil, errors.New("one of Contents or ContentsRef must be set")
@@ -126,7 +125,7 @@ func ParseRekorEntry(r io.Reader, leaf RekorLeaf) (*RekorEntry, error) {
 func (r *RekorEntry) Load(ctx context.Context) error {
 
 	hashR, hashW := io.Pipe()
-	pgpR, pgpW := io.Pipe()
+	sigR, sigW := io.Pipe()
 
 	var dataReader io.Reader
 	if r.URL != "" {
@@ -157,10 +156,10 @@ func (r *RekorEntry) Load(ctx context.Context) error {
 
 	g.Go(func() error {
 		defer hashW.Close()
-		defer pgpW.Close()
+		defer sigW.Close()
 
 		/* #nosec G110 */
-		if _, err := io.Copy(io.MultiWriter(hashW, pgpW), dataReader); err != nil {
+		if _, err := io.Copy(io.MultiWriter(hashW, sigW), dataReader); err != nil {
 			return err
 		}
 		return nil
@@ -192,14 +191,9 @@ func (r *RekorEntry) Load(ctx context.Context) error {
 	})
 
 	g.Go(func() error {
-		defer pgpR.Close()
+		defer sigR.Close()
 
-		verifyFn := openpgp.CheckDetachedSignature
-		if r.ArmorSig == true {
-			verifyFn = openpgp.CheckArmoredDetachedSignature
-		}
-
-		if _, err := verifyFn(r.PubKeyEnt, pgpR, bytes.NewReader(r.Signature)); err != nil {
+		if err := r.sigObject.Verify(sigR, r.keyObject); err != nil {
 			return err
 		}
 

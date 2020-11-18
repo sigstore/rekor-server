@@ -275,7 +275,7 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 		}
 	}
 
-	rekorEntry, err := types.ParseRekorEntry(&byteEntry, *rekorLeaf)
+	rekorEntry, err := types.ParseRekorEntry(&byteEntry, rekorLeaf)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +285,7 @@ func (api *API) addHandler(r *http.Request) (interface{}, error) {
 		return nil, err
 	}
 
-	leafToAdd, err := json.Marshal(rekorEntry.RekorLeaf)
+	leafToAdd, err := json.Marshal(&(rekorEntry.RekorLeaf))
 	if err != nil {
 		return nil, err
 	}
