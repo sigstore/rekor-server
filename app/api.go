@@ -39,7 +39,6 @@ import (
 type API struct {
 	tLogID    int64
 	logClient trillian.TrillianLogClient
-	mapClient trillian.TrillianMapClient
 	pubkey    *keyspb.PublicKey
 }
 
@@ -101,24 +100,6 @@ func NewAPI() (*API, error) {
 		tLogID = t.TreeId
 	}
 
-	mapRpcServer := fmt.Sprintf("%s:%d",
-		viper.GetString("trillian_map_server.address"),
-		viper.GetUint("trillian_map_server.port"))
-	mConn, err := dial(ctx, mapRpcServer)
-	if err != nil {
-		return nil, err
-	}
-	mapAdminClient := trillian.NewTrillianAdminClient(mConn)
-	mapClient := trillian.NewTrillianMapClient(mConn)
-	tMapID := viper.GetInt64("trillian_map_server.tmap_id")
-	if tMapID == 0 {
-		t, err := createAndInitMap(ctx, mapAdminClient, mapClient)
-		if err != nil {
-			return nil, err
-		}
-		tMapID = t.TreeId
-	}
-
 	t, err := logAdminClient.GetTree(ctx, &trillian.GetTreeRequest{
 		TreeId: tLogID,
 	})
@@ -129,7 +110,6 @@ func NewAPI() (*API, error) {
 	return &API{
 		tLogID:    tLogID,
 		logClient: logClient,
-		mapClient: mapClient,
 		pubkey:    t.PublicKey,
 	}, nil
 }
@@ -140,7 +120,9 @@ func wrap(h apiHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		r = r.WithContext(logging.WithRequestID(ctx, middleware.GetReqID(ctx)))
-		defer logging.RequestIDLogger(r).Sync()
+		defer func() {
+			_ = logging.RequestIDLogger(r).Sync()
+		}()
 
 		respObj, err := h(r)
 		if err != nil {
@@ -229,6 +211,9 @@ func (api *API) getProofHandler(r *http.Request) (interface{}, error) {
 
 	proofResults := resp.getProofResult
 	proofResultsJSON, err := json.Marshal(proofResults)
+	if err != nil {
+		return nil, err
+	}
 
 	logging.RequestIDLogger(r).Info("Return Proof Result: ", string(proofResultsJSON))
 
